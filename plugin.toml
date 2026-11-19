@@ -1,0 +1,94 @@
+id = "weigram.hotreload"
+name = "Hot Reload"
+version = "1.1.0"
+description = "Java / MyBatis XML hot reload for OpenIDEA: auto-build on save, redefine classes and refresh MyBatis mapper XML in the running JVM without restarting the application."
+authors = ["weigram"]
+homepage = "https://github.com/weigram/plugin-hotreload"
+license = "GPL-2.0-only"
+icon = "icon.svg"
+categories = ["tools", "frameworks"]
+change-notes = "1.1.0 — 合并 HotSwapAgent 2.0.5：Spring bean/controller/AOP 重处理、类重定义由 HA 负责；保留自研 Mapper XML 刷新；运行时打开 JDK 模块，不需要 -XX:HotswapAgent=external 或 --add-opens。右键只保留 Run/Debug，图标 #11e3e9；1.0.1 增加右键 Run/Debug；1.0.0 从零重写。"
+engines.openidea = "^1.10"
+wasm = "dist/plugin.wasm"
+activation = ["on-event:files-changed"]
+
+[capabilities]
+required = ["project.read", "events", "ide.commands"]
+optional = ["clipboard", "process:mvn"]
+
+# The IDE adds `-javaagent:<this jar>` to Application, Spring Boot and
+# JAR Application run configurations, for Run and Debug. The jar is built by
+# build.sh and is deterministic so the java.agent grant keeps matching.
+[[contributes.javaAgents]]
+path = "agent/hotreload-agent.jar"
+
+[[contributes.commands]]
+id = "compile"
+title = "Hot Reload: Compile & Reload"
+category = "Hot Reload"
+when = "projectOpen"
+
+[[contributes.commands]]
+id = "run-context"
+title = "Hot Reload: Run Current File"
+icon = "icons/run.svg"
+category = "Hot Reload"
+when = "projectOpen"
+
+[[contributes.commands]]
+id = "debug-context"
+title = "Hot Reload: Debug Current File"
+icon = "icons/debug.svg"
+category = "Hot Reload"
+when = "projectOpen"
+
+[[contributes.commands]]
+id = "doctor"
+title = "Hot Reload: Diagnose"
+category = "Hot Reload"
+
+[[contributes.commands]]
+id = "copy-vm"
+title = "Hot Reload: Copy Enhanced VM Options"
+category = "Hot Reload"
+
+# Only Run/Debug appear in the editor, editor-tab and project-tree context
+# menus. Compile stays on the status bar and Meta+Alt+R; Diagnose and Copy VM
+# stay in Settings and Search Everywhere.
+[[contributes.menus]]
+menu = "editor.context"
+command = "run-context"
+
+[[contributes.menus]]
+menu = "editor.context"
+command = "debug-context"
+
+[[contributes.menus]]
+menu = "editorTab.context"
+command = "run-context"
+
+[[contributes.menus]]
+menu = "editorTab.context"
+command = "debug-context"
+
+[[contributes.menus]]
+menu = "projectView.context"
+command = "run-context"
+
+[[contributes.menus]]
+menu = "projectView.context"
+command = "debug-context"
+
+[[contributes.keymaps]]
+command = "compile"
+key = "Ctrl+Alt+R"
+mac = "Meta+Alt+R"
+
+[contributes.settings]
+schema = "settings.schema.json"
+
+[[contributes.statusBar]]
+id = "weigram.hotreload.status"
+text = "Hot Reload"
+tooltip = "保存 Java / Mapper XML 后自动编译并热更新；点击立即编译"
+command = "compile"

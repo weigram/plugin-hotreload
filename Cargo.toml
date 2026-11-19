@@ -1,0 +1,22 @@
+[package]
+name = "hotreload"
+version = "1.1.0"
+edition = "2024"
+publish = false
+description = "Java and MyBatis mapper XML hot reload for OpenIDEA"
+license = "GPL-2.0-only"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+openidea-plugin = { git = "https://github.com/l0ng-ai/openidea", tag = "v0.1.48" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

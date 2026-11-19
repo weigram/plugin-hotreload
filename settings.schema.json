@@ -1,0 +1,47 @@
+{
+  "properties": {
+    "autoCompile": {
+      "type": "boolean",
+      "title": "保存后自动编译",
+      "description": "Java / Mapper XML 保存后自动触发 IDE 构建（Build Module），agent 随即热更新。关闭后仍可用命令或快捷键手动编译。",
+      "default": true
+    },
+    "includeXml": {
+      "type": "boolean",
+      "title": "XML 保存也触发构建",
+      "description": "Mapper XML 需要被 Maven 复制到 target/classes 后 agent 才能看到；关闭后只对 Java 保存自动构建。",
+      "default": true
+    },
+    "buildBackend": {
+      "type": "string",
+      "title": "编译方式",
+      "description": "ide：调用 IDE 的 Build Module（推荐，增量、显示在 Build 窗口，需要 ide.commands 授权）。maven：手动命令使用 mvn compile；自动编译仍走 IDE。",
+      "enum": ["ide", "maven"],
+      "default": "ide"
+    },
+    "compileArgs": {
+      "type": "string",
+      "title": "Maven 编译参数",
+      "description": "仅“编译方式 = maven”的手动编译使用。默认 -q -DskipTests compile。",
+      "default": "-q -DskipTests compile"
+    },
+    "refocusEditor": {
+      "type": "boolean",
+      "title": "自动编译后回到编辑器",
+      "description": "自动编译会打开 Build 窗口；开启时构建触发后立即把焦点还给编辑器，避免保存代码时焦点被 Build 抢走。手动编译不受影响。",
+      "default": true
+    },
+    "debounceMs": {
+      "type": "integer",
+      "title": "自动编译防抖（毫秒）",
+      "description": "两次保存间隔小于该值时只编译一次，避免连续保存触发多次构建。",
+      "default": 1200
+    },
+    "notifications": {
+      "type": "boolean",
+      "title": "显示通知",
+      "description": "自动编译出错、缺少授权时弹出通知。正常的热更日志在应用的 Run 控制台里。",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,13 @@
+/target
+/build
+**/target/
+/.DS_Store
+*.tmp
+*.log
+
+# Reference-only source, not part of the plugin package
+/HotSwapHelper-master
+
+# Publisher signing keys must never be committed
+*.key
+/dist/*.oiplugin
