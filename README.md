@@ -25,7 +25,7 @@ A standard JDK is enough for method bodies, Mapper XML, and adding/removing clas
 
 ### Download
 
-- **JBR** — [JetBrains Runtime releases](https://github.com/JetBrains/JetBrainsRuntime/releases) or [JetBrains JBR page](https://www.jetbrains.com/intellij/jbr/). JBR 17, 21, and 25 were tested here.
+- **JBR** — [JetBrains Runtime releases](https://github.com/JetBrains/JetBrainsRuntime/releases), [JBR 11.0.15 build](https://github.com/JetBrains/JetBrainsRuntime/releases/tag/jbr11_0_15b2043.56), or [JetBrains JBR page](https://www.jetbrains.com/intellij/jbr/). JBR 11, 17, 21, and 25 were tested here.
 - **DCEVM** — [DCEVM 11 builds](https://github.com/TravaOpenJDK/trava-jdk-11-dcevm/releases), [DCEVM 8 builds](https://github.com/TravaOpenJDK/trava-jdk-8-dcevm/releases), or [dcevm.github.io](https://dcevm.github.io/). DCEVM 8u282 and 11.0.15 were tested here.
 
 ### Select the JDK in OpenIDEA
@@ -75,7 +75,7 @@ OpenIDEA's built-in HotSwap is useful for quick method-body edits, but in a stan
 
 This plugin fills those gaps while leaving the IDE debugger usable. Built-in HotSwap behavior varies by OpenIDEA and JDK version; the list above is the set of gaps this integration is designed to cover.
 
-Structural changes have JVM limits. The tested matrix is in [Test Status](#4-test-status); replacing a superclass is not supported by JBR 17/21/25, and replacing/removing interfaces works on JBR 21/25 but not JBR 17.
+Structural changes have JVM limits. The tested matrix is in [Test Status](#4-test-status); replacing a superclass is not supported by JBR 11/17/21/25, and replacing/removing interfaces works on JBR 21/25 but not JBR 11/17.
 
 ## 2. How It Works
 
@@ -251,21 +251,23 @@ Each case starts a fresh JVM. Method body and Mapper XML do not use `-XX`; struc
 
 #### JBR
 
-| Operation | JBR 17 | JBR 21 | JBR 25 |
-| --- | --- | --- | --- |
-| Method body | ✅ | ✅ | ✅ |
-| Mapper XML | ✅ | ✅ | ✅ |
-| Add method | ✅ | ✅ | ✅ |
-| Remove method | ✅ | ✅ | ✅ |
-| Add field | ✅ | ✅ | ✅ |
-| Remove field | ✅ | ✅ | ✅ |
-| Add class annotation | ✅ | ✅ | ✅ |
-| Remove class annotation | ✅ | ✅ | ✅ |
-| Add interface | ✅ | ✅ | ✅ |
-| Remove interface | ❌ hierarchy change | ✅ | ✅ |
-| Replace interface | ❌ hierarchy change | ✅ | ✅ |
-| Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
-| Change method signature | ✅ | ✅ | ✅ |
+| Operation | JBR 11 | JBR 17 | JBR 21 | JBR 25 |
+| --- | --- | --- | --- | --- |
+| Method body | ✅ | ✅ | ✅ | ✅ |
+| Mapper XML | ✅ | ✅ | ✅ | ✅ |
+| Add method | ✅ | ✅ | ✅ | ✅ |
+| Remove method | ✅ | ✅ | ✅ | ✅ |
+| Add field | ✅ | ✅ | ✅ | ✅ |
+| Remove field | ✅ | ✅ | ✅ | ✅ |
+| Add class annotation | ✅ | ✅ | ✅ | ✅ |
+| Remove class annotation | ✅ | ✅ | ✅ | ✅ |
+| Add interface | ✅ | ✅ | ✅ | ✅ |
+| Remove interface | ❌ hierarchy change | ❌ hierarchy change | ✅ | ✅ |
+| Replace interface | ❌ hierarchy change | ❌ hierarchy change | ✅ | ✅ |
+| Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Change method signature | ✅ | ✅ | ✅ | ✅ |
+
+JBR 11 here is `JBR-11.0.15.10-2043.56-dcevm`; it is a DCEVM build and matches JBR 17. Removing/replacing interfaces still fails on 11 and 17; JBR 21/25 support it.
 
 #### DCEVM
 

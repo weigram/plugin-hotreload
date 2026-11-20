@@ -16,7 +16,7 @@ Mapper XML 由本插件的自研 reloader 负责（HA 的 MyBatis/MyBatis-Plus �
 HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=external`；JDK 模块 opens
 由 agent 运行时调用 `Instrumentation.redefineModule` 完成，**不需要 `--add-opens`**。
 方法体和 XML 在 JDK 8–25 上不需要任何 `-XX`；「增删方法/字段、增加接口、类注解」需要 JBR 的
-`-XX:+AllowEnhancedClassRedefinition`（JBR 17 实测通过）。**删除/替换接口在 JBR 17 上仍会报
+`-XX:+AllowEnhancedClassRedefinition`（JBR 11 / 17 实测通过）。**删除/替换接口在 JBR 11 / 17 上仍会报
 `attempted to change superclass or interfaces`；JBR 21/25 已支持；替换父类仍需要重启。**
 
 ## 推荐 JDK：JBR 或 DCEVM
@@ -36,7 +36,7 @@ HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=
 
 ### 下载
 
-- **JBR**：[JetBrains Runtime releases](https://github.com/JetBrains/JetBrainsRuntime/releases) 或 [JetBrains JBR 页面](https://www.jetbrains.com/intellij/jbr/)。本次测试了 JBR 17 / 21 / 25。
+- **JBR**：[JetBrains Runtime releases](https://github.com/JetBrains/JetBrainsRuntime/releases)、[JBR 11.0.15 构建](https://github.com/JetBrains/JetBrainsRuntime/releases/tag/jbr11_0_15b2043.56) 或 [JetBrains JBR 页面](https://www.jetbrains.com/intellij/jbr/)。本次测试了 JBR 11 / 17 / 21 / 25。
 - **DCEVM**：[DCEVM 11 构建](https://github.com/TravaOpenJDK/trava-jdk-11-dcevm/releases)、[DCEVM 8 构建](https://github.com/TravaOpenJDK/trava-jdk-8-dcevm/releases) 或 [dcevm.github.io](https://dcevm.github.io/)。本次测试了 DCEVM 8u282 / 11.0.15。
 
 ### 在 OpenIDEA 中更换 JDK
@@ -306,21 +306,23 @@ There is no network capability and no telemetry. The bundled HotSwapAgent 2.0.5 
 
 ### JBR（JetBrains Runtime）
 
-| 操作         | JBR 17 | JBR 21 | JBR 25 |
-| ---------- | ------ | ------ | ------ |
-| 方法体        | ✅      | ✅      | ✅      |
-| Mapper XML | ✅      | ✅      | ✅      |
-| 增加方法       | ✅      | ✅      | ✅      |
-| 删除方法       | ✅      | ✅      | ✅      |
-| 增加字段       | ✅      | ✅      | ✅      |
-| 删除字段       | ✅      | ✅      | ✅      |
-| 增加类注解      | ✅      | ✅      | ✅      |
-| 删除类注解      | ✅      | ✅      | ✅      |
-| 增加接口       | ✅      | ✅      | ✅      |
-| 删除接口       | ❌ 层次变更 | ✅      | ✅      |
-| 替换接口       | ❌ 层次变更 | ✅      | ✅      |
-| 替换父类       | ❌ 层次变更 | ❌ 层次变更 | ❌ 层次变更 |
-| 修改方法签名     | ✅      | ✅      | ✅      |
+| 操作         | JBR 11 | JBR 17 | JBR 21 | JBR 25 |
+| ---------- | ------ | ------ | ------ | ------ |
+| 方法体        | ✅      | ✅      | ✅      | ✅      |
+| Mapper XML | ✅      | ✅      | ✅      | ✅      |
+| 增加方法       | ✅      | ✅      | ✅      | ✅      |
+| 删除方法       | ✅      | ✅      | ✅      | ✅      |
+| 增加字段       | ✅      | ✅      | ✅      | ✅      |
+| 删除字段       | ✅      | ✅      | ✅      | ✅      |
+| 增加类注解      | ✅      | ✅      | ✅      | ✅      |
+| 删除类注解      | ✅      | ✅      | ✅      | ✅      |
+| 增加接口       | ✅      | ✅      | ✅      | ✅      |
+| 删除接口       | ❌ 层次变更 | ❌ 层次变更 | ✅      | ✅      |
+| 替换接口       | ❌ 层次变更 | ❌ 层次变更 | ✅      | ✅      |
+| 替换父类       | ❌ 层次变更 | ❌ 层次变更 | ❌ 层次变更 | ❌ 层次变更 |
+| 修改方法签名     | ✅      | ✅      | ✅      | ✅      |
+
+JBR 11 使用的是 `JBR-11.0.15.10-2043.56-dcevm`（DCEVM 构建），行为与 JBR 17 一致；删除/替换接口在 11 和 17 上失败，JBR 21/25 支持。
 
 ### DCEVM
 
@@ -346,8 +348,8 @@ DCEVM 8u282 / 11.0.15+1 均为 macOS x86_64 构建，本机是 Apple Silicon，�
 
 - **方法体在 JDK 8–25 上开箱可用**，不需要 `-XX`；Mapper XML 由自研 reloader 处理，也不需要 `-XX`。
 - **类注解的增删在标准 JDK 上也可用**（实测 JDK 8 / 11 / 17 / 21 / 25 都通过）；JBR 上同样可用。
-- **增删方法/字段、修改方法签名**在标准 JDK 上失败；JBR 17 / 21 / 25 都通过。方法签名改变后旧方法被替换，调用方需要按新签名重新编译。
-- **增加接口**在 JBR 17 / 21 / 25 都可用；**删除/替换接口**在 JBR 17 上仍失败，在 JBR 21 / 25 上通过。
+- **增删方法/字段、修改方法签名**在标准 JDK 上失败；JBR 11 / 17 / 21 / 25 都通过。方法签名改变后旧方法被替换，调用方需要按新签名重新编译。
+- **增加接口**在 JBR 11 / 17 / 21 / 25 都可用；**删除/替换接口**在 JBR 11 / 17 上仍失败，在 JBR 21 / 25 上通过。
 - **替换父类**在三个 JBR 版本上都失败，需要重启；这是 JVM 的结构限制。
 - **DCEVM 8u282 / 11.0.15+1** 的结构能力与 JBR 17 一致：增删方法/字段、类注解、增加接口、修改方法签名可用；删除/替换接口、替换父类失败。两者是 x86_64 构建，在 Apple Silicon 上通过 Rosetta 运行。
 - Mapper XML 解析失败时，agent 会恢复旧 statement 并打印错误，应用继续可用。
