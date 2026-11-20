@@ -90,6 +90,49 @@ agent 做三件事：
    `MybatisConfiguration` 也覆盖）。XML 变化时按 namespace 清旧条目、重新解析；
    失败回滚，不会把应用留在半坏状态。
 
+### hotswap-agent-2.0.5.jar 的功能和逻辑
+
+HA 不是一个额外的进程，也不是让用户再加一个 `-javaagent`。`agent/package.py` 把
+`hotswap-agent-2.0.5.jar` 解包后，和 ASM、插件自己的类合并进
+`agent/hotreload-agent.jar`，并替换 HA 的 MANIFEST 和默认
+`hotswap-agent.properties`。
+
+- **启动**：插件调用 `HotswapAgent.premain(args, instrumentation)`。HA 创建
+  `PluginManager` / `PluginRegistry`，读取 `hotswap-agent.properties`，初始化启用的插件。
+- **插件发现**：`PluginRegistry` 扫描 HA 的 `Spring`、`SpringBoot` 等插件；
+  `disablePlugin` 指定的插件被跳过。本插件禁用 `MyBatis`、`MyBatisPlus`、
+  `WatchResources`。
+- **监听**：`autoHotswap=true` 时，`TreeWatcherNIO` 监听 class 输出目录；
+  `HotswapperPlugin` 收到变化的 `.class` 后交给 `PluginManager`。
+- **重定义**：`PluginManager.hotswap` 调用 `Instrumentation.redefineClasses`。
+  成功打印 `RELOAD`，失败打印 JVM 异常。HA 不能突破 JVM 限制：标准 HotSpot 只允许
+  方法体变化；结构变化仍需要 JBR 和 `-XX:+AllowEnhancedClassRedefinition`。
+- **框架 reprocess**：HA 的 Spring / Spring Boot 插件监听类和上下文变化，在类重定义后
+  reprocess bean 定义、controller 和 AOP 元数据。
+- **配置参数**：`autoHotswap=true`、`disablePlugin=MyBatis`、
+  `disablePlugin=MyBatisPlus`、`disablePlugin=WatchResources`、`LOGGER=info`；
+  不使用 `-XX:HotswapAgent=external`。
+- **许可**：HA 2.0.5 为 GPL-2.0，在合并 jar 中保持未修改；插件自身也是 GPL-2.0-only。
+
+```text
+保存文件
+   |
+   v
+OpenIDEA build.buildModule
+   |
+   v
+target/classes 变化
+   |
+   v
+HA TreeWatcherNIO -> HotswapperPlugin -> PluginManager
+   |
+   v
+Instrumentation.redefineClasses
+   |
+   v
+HA Spring 插件 reprocess bean/controller/AOP
+```
+
 wasm 组件只负责「什么时候编译」和「怎么诊断」：它不改项目的构建文件，不启动第二个
 JVM，也不往项目里写文件。
 
