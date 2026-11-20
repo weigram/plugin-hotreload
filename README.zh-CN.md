@@ -167,16 +167,8 @@ Python 3。
 
 ## 安装与使用
 
-```bash
-# 开发期：软链，改完在 Settings › Plugins 点 Reload
-openidea-plugin link
-
-# 本地安装（未签名，开发用）
-openidea-plugin pack
-
-# 发布到社区市场：用 publisher 私钥签名
-openidea-plugin pack . --key /secure/weigram.key --publisher weigram
-```
+从 OpenIDEA 社区市场安装，或通过 `Settings › Plugins › Install Plugin from Package File…`
+安装本地 `.oiplugin`。
 
 1. `Settings › Plugins › Hot Reload` 里批准：
    - `java.agent`（高，必需，agent 会跑在你的 Java 应用里）

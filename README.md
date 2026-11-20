@@ -113,19 +113,11 @@ HA Spring plugin reprocesses beans/controllers/AOP
 
 ### Install
 
-From a package:
+Install from the OpenIDEA marketplace, or use:
 
 ```text
 Settings › Plugins › Install Plugin from Package File…
 ```
-
-For development, link the source folder:
-
-```bash
-openidea-plugin link
-```
-
-Then use **Settings › Plugins › Reload from disk** after rebuilding.
 
 ### Capabilities
 
