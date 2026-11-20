@@ -11,8 +11,9 @@ agent 的内核是 **HotSwapAgent 2.0.5**：类重定义、Spring bean/controlle
 Mapper XML 由本插件的自研 reloader 负责（HA 的 MyBatis/MyBatis-Plus 插件被禁用，避免重复解析和代理冲突）。
 HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=external`；JDK 模块 opens
 由 agent 运行时调用 `Instrumentation.redefineModule` 完成，**不需要 `--add-opens`**。
-方法体和 XML 在 JDK 8–25 上不需要任何 `-XX`；只有「增删方法/字段」才需要 JBR 的
-`-XX:+AllowEnhancedClassRedefinition`。改父类 / 实现接口不支持，需要重启。
+方法体和 XML 在 JDK 8–25 上不需要任何 `-XX`；「增删方法/字段、增加/删除接口、类注解」需要 JBR 的
+`-XX:+AllowEnhancedClassRedefinition`（JBR 17 实测通过）。**替换父类或把 `implements A` 换成
+`implements B` 仍会报 `attempted to change superclass or interfaces`**，需要重启。
 
 ## 它解决什么问题
 
@@ -210,8 +211,10 @@ There is no network capability and no telemetry. The bundled HotSwapAgent 2.0.5 
   这是 JVM 能力，不是插件能绕过的；加方法失败时
   HA 会在控制台打印 `attempted to add a method`，本插件的 doctor 也会提示。方法体热更不需要
   这个参数。
-- **改父类 / 实现接口 / 删除接口仍不支持**：这是 HA 和 JVM 重定义的结构限制
-  （HotSwapHelper 的 README 也把它列为唯一不支持的操作），需要重启。
+- **替换父类 / 替换接口仍不支持**：JBR 17 实测可以**增加/删除**接口，但把
+  `implements A` 换成 `implements B` 或把 `extends BaseA` 换成 `extends BaseB` 会报
+  `class redefinition failed: attempted to change superclass or interfaces`，需要重启。
+  这是 JVM 的结构限制；HotSwapHelper 的 README 也把层次替换列为不支持操作。
 - Mapper XML 解析失败时，agent 会恢复旧 statement 并打印错误，应用继续可用。
 - **Spring XML 配置（`applicationContext.xml`）不热更**：为了保证 mapper XML 不被 HA 当成
   Spring bean 定义解析，agent 关闭了 HA 的 `registerResourceListeners`。Java Config /
@@ -243,6 +246,35 @@ agent 启动时会打印 `watching N class directories`。如果没有这一行�
 - 不要用 `spring-boot:repackage` 后的 fat jar（类在 `BOOT-INF/classes`，不是 exploded）；
 - `mvn spring-boot:run` 是 exploded classpath，可以使用；
 - 多模块工程从根目录启动也可以：`java.class.path` 会包含各模块的 `target/classes`。
+
+## 测试
+
+仓库自带两个不依赖 IDE 的端到端测试，用来区分“引擎正常”和“IDE 注入正常”：
+
+```bash
+# 方法体 + Mapper XML；普通 JDK 即可
+./test/e2e.sh
+
+# 结构变更矩阵；必须用 JBR，并自动带 -XX:+AllowEnhancedClassRedefinition
+JAVA=/path/to/jbr/bin/java ./test/structure.sh
+```
+
+`test/structure.sh` 启动一个只创建一次对象的 fixture，然后依次修改
+`test/fixture-structure/variants/` 里的 `Target` 并只编译这个类：
+
+| 修改类型 | JBR 17 结果 |
+| --- | --- |
+| 方法体 | ✅ |
+| 增加方法 + 字段 | ✅ |
+| 增加类注解 | ✅ |
+| 增加接口 | ✅ |
+| 删除接口 | ✅ |
+| 替换接口（`Marker` → `Marker2`） | ❌ `attempted to change superclass or interfaces` |
+| 替换父类（`BaseA` → `BaseB`） | ❌ 同上 |
+| 全部还原 | ✅ |
+
+两个测试都会断言 `### STARTED` 只出现一次，即进程没有重启。`structure.sh` 在不支持
+`-XX:+AllowEnhancedClassRedefinition` 的普通 JDK 上会 SKIP。
 
 ## 开发
 
