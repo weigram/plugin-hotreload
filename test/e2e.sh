@@ -73,6 +73,7 @@ path.write_text(path.read_text().replace("XML1", "XML2"))
 PY
 wait_for "VALUE XML2" 10 || fail "mapper XML was not reloaded"
 grep -q "reloaded mapper XML" "$LOG" || fail "no XML reload log line"
+echo "RESULT|xml|PASS|"
 
 echo "== redefine a method body =="
 mkdir -p "$FIXTURE/target/e2e-src"
@@ -85,6 +86,7 @@ PY
 "$JAVAC" -source 8 -target 8 -cp "$CP" -d "$CLASSES" "$FIXTURE/target/e2e-src/App.java" 2>/dev/null
 wait_for "VALUE2 XML2" 10 || fail "class redefinition was not applied"
 grep -Eq "reloaded demo.App|Reloading classes \\[demo.App\\]" "$LOG" || fail "no class reload log line"
+echo "RESULT|body|PASS|"
 
 STARTS="$(grep -c '### STARTED' "$LOG" || true)"
 [ "$STARTS" = "1" ] || fail "the process restarted ($STARTS starts)"

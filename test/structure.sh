@@ -35,6 +35,7 @@ trap cleanup EXIT
 
 if ! "$JAVA" -XX:+AllowEnhancedClassRedefinition -version >/dev/null 2>&1; then
   echo "SKIP: $JAVA does not accept -XX:+AllowEnhancedClassRedefinition (use JBR)"
+  echo "RESULT|structure|SKIP|does not accept -XX:+AllowEnhancedClassRedefinition"
   exit 0
 fi
 
@@ -81,8 +82,10 @@ check() {
   local name="$1" pattern="$2"
   if wait_for "$pattern" 15; then
     echo "PASS: $name"
+    echo "RESULT|$name|PASS|"
   else
     echo "FAIL: $name (wanted: $pattern)" >&2
+    echo "RESULT|$name|FAIL|wanted: $pattern"
     grep '^STATE' "$LOG" 2>/dev/null | tail -1 >&2 || true
     failures=$((failures + 1))
   fi
@@ -92,10 +95,13 @@ expect_unsupported() {
   local name="$1" pattern="$2"
   if wait_for "$pattern" 6; then
     echo "PASS: $name"
+    echo "RESULT|$name|PASS|"
   elif tail -n +$((LOG_MARK + 1)) "$LOG" 2>/dev/null | grep -Fq "attempted to change superclass or interfaces"; then
     echo "EXPECTED-UNSUPPORTED: $name (JBR refuses hierarchy replacement)"
+    echo "RESULT|$name|FAIL|attempted to change superclass or interfaces"
   else
     echo "FAIL: $name (neither applied nor reported as unsupported)" >&2
+    echo "RESULT|$name|FAIL|neither applied nor reported as unsupported"
     failures=$((failures + 1))
   fi
 }
@@ -127,10 +133,14 @@ echo "== group 1: supported changes =="
 start_app
 apply_variant body
 check "method body" "STATE value=V2 extra=NO field=NO marker=NO marker2=NO deprecated=false"
-apply_variant extra
-check "add method + field + annotation" "STATE value=A extra=YES field=YES marker=NO marker2=NO deprecated=true"
+apply_variant methods
+check "add method + field" "STATE value=A extra=YES field=YES marker=NO marker2=NO deprecated=false"
+apply_variant reverted
+check "remove method + field" "$BASELINE"
+apply_variant annotation
+check "add class annotation" "STATE value=A extra=NO field=NO marker=NO marker2=NO deprecated=true"
 apply_variant interface
-check "add interface, remove method/field/annotation" "STATE value=A extra=NO field=NO marker=YES marker2=NO deprecated=false"
+check "add interface" "STATE value=A extra=NO field=NO marker=YES marker2=NO deprecated=false"
 apply_variant reverted
 expect_unsupported "remove interface" "$BASELINE"
 stop_app
