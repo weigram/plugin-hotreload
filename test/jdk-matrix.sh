@@ -99,8 +99,11 @@ for home in "${homes[@]}"; do
   fi
 done
 
-python3 ./render-matrix.py "$RESULTS" ../README.md
+python3 ./render-matrix.py "$RESULTS" ../README.md en
 render_rc=$?
+python3 ./render-matrix.py "$RESULTS" ../README.zh-CN.md zh
+render_zh_rc=$?
+[ "$render_zh_rc" -ne 0 ] && render_rc=$render_zh_rc
 
 echo
 echo "============================================================"

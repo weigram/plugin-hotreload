@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the JDK test matrix in README.md from test/jdk-matrix.sh results."""
+"""Render the JDK test matrix in README.md / README.zh-CN.md."""
 from __future__ import annotations
 
 import re
@@ -9,17 +9,6 @@ from pathlib import Path
 BEGIN = "<!-- BEGIN JDK-MATRIX -->"
 END = "<!-- END JDK-MATRIX -->"
 
-ROWS = [
-    ("body", "方法体"),
-    ("xml", "Mapper XML"),
-    ("add_method_field", "增加方法/字段"),
-    ("add_annotation", "增加类注解"),
-    ("add_interface", "增加接口"),
-    ("remove_method_field", "删除方法/字段"),
-    ("remove_interface", "删除接口"),
-    ("replace_interface", "替换接口"),
-    ("replace_superclass", "替换父类"),
-]
 CASE_ROWS = {
     "add method + field": "add_method_field",
     "add class annotation": "add_annotation",
@@ -30,17 +19,57 @@ CASE_ROWS = {
     "replace superclass": "replace_superclass",
 }
 
+LABELS = {
+    "en": {
+        "title": "Modification",
+        "rows": [
+            ("body", "Method body"),
+            ("xml", "Mapper XML"),
+            ("add_method_field", "Add method/field"),
+            ("add_annotation", "Add class annotation"),
+            ("add_interface", "Add interface"),
+            ("remove_method_field", "Remove method/field"),
+            ("remove_interface", "Remove interface"),
+            ("replace_interface", "Replace interface"),
+            ("replace_superclass", "Replace superclass"),
+        ],
+        "missing_jbr": "not tested (JBR required)",
+        "missing": "not tested",
+        "hierarchy": "hierarchy change unsupported",
+        "wanted": "result did not update",
+        "e2e": "e2e failed",
+    },
+    "zh": {
+        "title": "修改",
+        "rows": [
+            ("body", "方法体"),
+            ("xml", "Mapper XML"),
+            ("add_method_field", "增加方法/字段"),
+            ("add_annotation", "增加类注解"),
+            ("add_interface", "增加接口"),
+            ("remove_method_field", "删除方法/字段"),
+            ("remove_interface", "删除接口"),
+            ("replace_interface", "替换接口"),
+            ("replace_superclass", "替换父类"),
+        ],
+        "missing_jbr": "未测试（需 JBR）",
+        "missing": "未测试",
+        "hierarchy": "层次变更不支持",
+        "wanted": "结果未更新",
+        "e2e": "e2e 失败",
+    },
+}
 
-def short_reason(reason: str) -> str:
+
+def short_reason(reason: str, lang: str) -> str:
+    labels = LABELS[lang]
     reason = reason.strip()
     if "attempted to change superclass or interfaces" in reason:
-        return "层次变更不支持"
+        return labels["hierarchy"]
     if reason.startswith("wanted:"):
-        return "结果未更新"
+        return labels["wanted"]
     if reason == "e2e failed":
-        return "e2e 失败"
-    if "does not accept -XX:+AllowEnhancedClassRedefinition" in reason:
-        return "需要 JBR 增强重定义"
+        return labels["e2e"]
     reason = reason.replace("|", "\\|")
     return reason[:48]
 
@@ -52,11 +81,17 @@ def column_key(label: str):
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print("usage: render-matrix.py RESULTS.tsv README.md", file=sys.stderr)
+    if len(sys.argv) not in (3, 4):
+        print("usage: render-matrix.py RESULTS.tsv README.md [en|zh]", file=sys.stderr)
         return 2
     results = Path(sys.argv[1])
     readme = Path(sys.argv[2])
+    lang = sys.argv[3] if len(sys.argv) == 4 else "zh"
+    if lang not in LABELS:
+        print(f"unknown language: {lang}", file=sys.stderr)
+        return 2
+    labels = LABELS[lang]
+    known_rows = {key for key, _ in labels["rows"]}
 
     cells: dict[tuple[str, str], tuple[str, str]] = {}
     columns: set[str] = set()
@@ -67,7 +102,7 @@ def main() -> int:
         label, case, status = parts[0], parts[1], parts[2]
         reason = parts[3] if len(parts) > 3 else ""
         row = CASE_ROWS.get(case, case)
-        if row not in {key for key, _ in ROWS}:
+        if row not in known_rows:
             continue
         columns.add(label)
         cells[(label, row)] = (status, reason)
@@ -77,7 +112,7 @@ def main() -> int:
         return 1
 
     columns = sorted(columns, key=column_key)
-    header = "| 修改 | " + " | ".join(columns) + " |"
+    header = "| " + labels["title"] + " | " + " | ".join(columns) + " |"
     separator = "| --- | " + " | ".join("---" for _ in columns) + " |"
     lines = [
         BEGIN,
@@ -85,16 +120,16 @@ def main() -> int:
         header,
         separator,
     ]
-    for key, title in ROWS:
+    for key, title in labels["rows"]:
         row = [title]
         for label in columns:
             status, reason = cells.get((label, key), ("", ""))
             if status == "PASS":
                 cell = "✅"
             elif status == "FAIL":
-                cell = "❌ " + short_reason(reason)
+                cell = "❌ " + short_reason(reason, lang)
             else:
-                cell = "❌ 未测试（需 JBR）" if not label.startswith("JBR") else "❌ 未测试"
+                cell = "❌ " + (labels["missing_jbr"] if not label.startswith("JBR") else labels["missing"])
             row.append(cell)
         lines.append("| " + " | ".join(row) + " |")
     lines.append(END)
@@ -112,7 +147,7 @@ def main() -> int:
         flags=re.S,
     )
     readme.write_text(text)
-    print(f"updated {readme} with {len(columns)} JDK column(s)")
+    print(f"updated {readme} ({lang}, {len(columns)} JDK columns)")
     return 0
 
 
