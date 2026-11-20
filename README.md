@@ -1,3 +1,7 @@
+---
+domd-id: 9839cbd6-6e49-4681-b9d9-9d4dcad5ad3a
+---
+
 # Hot Reload — OpenIDEA 的 Java / MyBatis XML 热加载
 
 改完 Java 或 MyBatis Mapper XML 保存，**自动编译 + 原地热更新**，应用不用重启。
@@ -20,30 +24,30 @@ HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=
 设置项和交互参考了 [HotSwapHelper](https://gitee.com/gejun123456/HotSwapHelper) 的
 issues；下面是这些 issue 在 OpenIDEA 里的对应做法：
 
-| HotSwapHelper issue | 原问题 | 本插件 |
-| --- | --- | --- |
-| [IBSM5Y](https://gitee.com/gejun123456/HotSwapHelper/issues/IBSM5Y) 自动热更新 | 每次都要手动 Ctrl+F9 | 监听 `files-changed`，保存 `.java` / mapper `.xml` 后自动触发 IDE 的 Build Module（1.2s 防抖） |
-| [IAYBKM](https://gitee.com/gejun123456/HotSwapHelper/issues/IAYBKM) XML 没生效 | 外部 agent / 版本 bug，namespace 没刷新 | agent 内置 XML 刷新：按 namespace 清掉旧 statement / resultMap / sqlFragment，再用 MyBatis 自己的 `XMLMapperBuilder` 重新解析；解析失败自动回滚旧语句 |
-| [IBEIL6](https://gitee.com/gejun123456/HotSwapHelper/issues/IBEIL6) 插件启动异常 | MyBatis 与 MyBatis-Plus 代理类冲突 | 不改 MyBatis 的 Mapper 代理，只给 `Configuration.addMappedStatement` 注入一行注册调用；MyBatis-Plus 的 `MybatisConfiguration` 也覆盖到 |
-| [IAUQWJ](https://gitee.com/gejun123456/HotSwapHelper/issues/IAUQWJ) 普通 Application | 只支持特定启动方式 | `javaAgents` 覆盖 Application、Spring Boot、JAR Application 三种配置，Run/Debug 都注入 |
-| [IANMWH](https://gitee.com/gejun123456/HotSwapHelper/issues/IANMWH) 兼容 PageHelper | 需要换特殊 agent | 不碰 MyBatis 内部执行链和代理，PageHelper 的 Interceptor 不受影响 |
-| [IANCYU](https://gitee.com/gejun123456/HotSwapHelper/issues/IANCYU) JDK 21 不支持 | 普通 JDK 不认识 `-XX:HotswapAgent` / `AllowEnhancedClassRedefinition` | 默认不生成任何 `-XX`；方法体和 XML 在 Corretto/MS JDK 21 上直接可用。增强重定义参数只在需要结构热更时手动加 |
-| [ICT2OU](https://gitee.com/gejun123456/HotSwapHelper/issues/ICT2OU) Spring Debugger | 生态集成 | 本插件走标准 `java.instrument`，和 IDE 自己的 debug / HotSwap 互不依赖；调试启动同样注入 |
+| HotSwapHelper issue                                                                 | 原问题                                                              | 本插件                                                                                                                    |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| [IBSM5Y](https://gitee.com/gejun123456/HotSwapHelper/issues/IBSM5Y) 自动热更新           | 每次都要手动 Ctrl+F9                                                   | 监听 `files-changed`，保存 `.java` / mapper `.xml` 后自动触发 IDE 的 Build Module（1.2s 防抖）                                        |
+| [IAYBKM](https://gitee.com/gejun123456/HotSwapHelper/issues/IAYBKM) XML 没生效         | 外部 agent / 版本 bug，namespace 没刷新                                  | agent 内置 XML 刷新：按 namespace 清掉旧 statement / resultMap / sqlFragment，再用 MyBatis 自己的 `XMLMapperBuilder` 重新解析；解析失败自动回滚旧语句 |
+| [IBEIL6](https://gitee.com/gejun123456/HotSwapHelper/issues/IBEIL6) 插件启动异常          | MyBatis 与 MyBatis-Plus 代理类冲突                                     | 不改 MyBatis 的 Mapper 代理，只给 `Configuration.addMappedStatement` 注入一行注册调用；MyBatis-Plus 的 `MybatisConfiguration` 也覆盖到       |
+| [IAUQWJ](https://gitee.com/gejun123456/HotSwapHelper/issues/IAUQWJ) 普通 Application  | 只支持特定启动方式                                                        | `javaAgents` 覆盖 Application、Spring Boot、JAR Application 三种配置，Run/Debug 都注入                                             |
+| [IANMWH](https://gitee.com/gejun123456/HotSwapHelper/issues/IANMWH) 兼容 PageHelper   | 需要换特殊 agent                                                      | 不碰 MyBatis 内部执行链和代理，PageHelper 的 Interceptor 不受影响                                                                      |
+| [IANCYU](https://gitee.com/gejun123456/HotSwapHelper/issues/IANCYU) JDK 21 不支持      | 普通 JDK 不认识 `-XX:HotswapAgent` / `AllowEnhancedClassRedefinition` | 默认不生成任何 `-XX`；方法体和 XML 在 Corretto/MS JDK 21 上直接可用。增强重定义参数只在需要结构热更时手动加                                                  |
+| [ICT2OU](https://gitee.com/gejun123456/HotSwapHelper/issues/ICT2OU) Spring Debugger | 生态集成                                                             | 本插件走标准 `java.instrument`，和 IDE 自己的 debug / HotSwap 互不依赖；调试启动同样注入                                                       |
 
 ## 与 HotSwapHelper 源码的关系
 
 本插件**没有复制** HotSwapHelper 的代码。最初只读了它的 issues；1.0.1 完成后又读了
 v1.1.7（commit `3ead869`）的源码做对照。两者解决同一个问题，但架构不同：
 
-| 方面 | HotSwapHelper 源码 | 本插件 |
-| --- | --- | --- |
-| agent 注入 | 自定义 `HotSwapDebugExecutor` + `JavaProgramPatcher`，只对 “Debug with Hotswap” 生效 | OpenIDEA `[[contributes.javaAgents]]`，Application / Spring Boot / JAR Application 的 Run 和 Debug 都自动注入 |
-| 热更实现 | 内置 `hotswap-agent.jar`，依赖 HA 的 Spring/MyBatis 插件 | 合并 HA 2.0.5 作为类/Spring 内核；XML 由自研 reloader 负责，HA MyBatis/MyBatis-Plus/WatchResources 插件关闭 |
-| JDK 要求 | JDK 8 需要 DCEVM；11/17 需要 JBR/HA jar，并加 `-XX:HotswapAgent=external` 等 | HA 直接以 `premain` 启动；方法体 / XML 在 JDK 8–25 上不需要 `-XX`；只有增删方法/字段才需要 JBR 的 `AllowEnhancedClassRedefinition`；JDK 模块 opens 由 agent 运行时完成 |
-| 自动热更 | 检查 IDEA 的 `RUN_HOTSWAP_AFTER_COMPILE`，没有文件监听（issue IBSM5Y 仍开放） | 监听 `files-changed`，保存后自动 Build Module |
-| 右键 Run/Debug | 只有 Run Dashboard 工具栏的 “Debug with Hotswap” action | 编辑器 / 标签页 / 项目树右键只保留 Run、Debug，调用 IDE 自己的上下文运行 |
-| agent 文件 | 启动时复制到 `~/.hotswap/hotswap-agent.jar` | HA + 自研代码合并成一个 jar，留在插件包内，由 IDE 按哈希校验；构建可复现 |
-| 设置 | 外部 agent、禁用 HA 插件、不检查 JDK、旧 debugger agent | 自动编译、XML 构建、防抖、通知、maven 兜底 |
+| 方面           | HotSwapHelper 源码                                                             | 本插件                                                                                                                                |
+| ------------ | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| agent 注入     | 自定义 `HotSwapDebugExecutor` + `JavaProgramPatcher`，只对 “Debug with Hotswap” 生效 | OpenIDEA `[[contributes.javaAgents]]`，Application / Spring Boot / JAR Application 的 Run 和 Debug 都自动注入                              |
+| 热更实现         | 内置 `hotswap-agent.jar`，依赖 HA 的 Spring/MyBatis 插件                             | 合并 HA 2.0.5 作为类/Spring 内核；XML 由自研 reloader 负责，HA MyBatis/MyBatis-Plus/WatchResources 插件关闭                                          |
+| JDK 要求       | JDK 8 需要 DCEVM；11/17 需要 JBR/HA jar，并加 `-XX:HotswapAgent=external` 等          | HA 直接以 `premain` 启动；方法体 / XML 在 JDK 8–25 上不需要 `-XX`；只有增删方法/字段才需要 JBR 的 `AllowEnhancedClassRedefinition`；JDK 模块 opens 由 agent 运行时完成 |
+| 自动热更         | 检查 IDEA 的 `RUN_HOTSWAP_AFTER_COMPILE`，没有文件监听（issue IBSM5Y 仍开放）               | 监听 `files-changed`，保存后自动 Build Module                                                                                              |
+| 右键 Run/Debug | 只有 Run Dashboard 工具栏的 “Debug with Hotswap” action                            | 编辑器 / 标签页 / 项目树右键只保留 Run、Debug，调用 IDE 自己的上下文运行                                                                                     |
+| agent 文件     | 启动时复制到 `~/.hotswap/hotswap-agent.jar`                                        | HA + 自研代码合并成一个 jar，留在插件包内，由 IDE 按哈希校验；构建可复现                                                                                        |
+| 设置           | 外部 agent、禁用 HA 插件、不检查 JDK、旧 debugger agent                                   | 自动编译、XML 构建、防抖、通知、maven 兜底                                                                                                         |
 
 `HotSwapHelper-master/` 是你放进来的只读参考源码，已加入 `.gitignore`，不会进入 `.oiplugin`；
 本插件没有从它复制代码。
@@ -138,13 +142,13 @@ openidea-plugin pack . --key /secure/weigram.key --publisher weigram
 
 ### 命令
 
-| 命令 | 快捷键 | 作用 |
-| --- | --- | --- |
-| `Hot Reload: Run Current File` | — | 右键 / 命令面板：用 IDE 自己的上下文运行配置启动当前类（临时 Application / Spring Boot 配置），agent 自动注入 |
-| `Hot Reload: Debug Current File` | — | 同上，Debug 启动 |
-| `Hot Reload: Compile & Reload` | ⌘⌥R / Ctrl+Alt+R | 立即编译当前文件所在模块；不依赖自动编译 |
-| `Hot Reload: Diagnose` | — | 打开 Markdown 诊断页：授权、项目 JDK、输出目录、运行配置里的增强参数、agent 日志示例 |
-| `Hot Reload: Copy Enhanced VM Options` | — | 复制 `-XX:+AllowEnhancedClassRedefinition`，用于 JBR 结构热更 |
+| 命令                                     | 快捷键              | 作用                                                                          |
+| -------------------------------------- | ---------------- | --------------------------------------------------------------------------- |
+| `Hot Reload: Run Current File`         | —                | 右键 / 命令面板：用 IDE 自己的上下文运行配置启动当前类（临时 Application / Spring Boot 配置），agent 自动注入 |
+| `Hot Reload: Debug Current File`       | —                | 同上，Debug 启动                                                                 |
+| `Hot Reload: Compile & Reload`         | ⌘⌥R / Ctrl+Alt+R | 立即编译当前文件所在模块；不依赖自动编译                                                        |
+| `Hot Reload: Diagnose`                 | —                | 打开 Markdown 诊断页：授权、项目 JDK、输出目录、运行配置里的增强参数、agent 日志示例                        |
+| `Hot Reload: Copy Enhanced VM Options` | —                | 复制 `-XX:+AllowEnhancedClassRedefinition`，用于 JBR 结构热更                        |
 
 编辑器右键、编辑器标签页右键、项目树右键只保留 **Run / Debug** 两个入口（图标 #11e3e9）。
 Compile 走状态栏点击或 `⌘⌥R`；Diagnose / Copy VM 在 Settings 的 Hot Reload 页或命令面板。
@@ -161,15 +165,15 @@ Run / Debug 不自己起 `mvn`，而是调用 IDE 的 `run.runContext` / `run.de
 
 ### 设置
 
-| 设置 | 默认 | 说明 |
-| --- | --- | --- |
-| 保存后自动编译 | 开 | 关闭后仍可用命令/快捷键手动编译 |
-| XML 保存也触发构建 | 开 | Mapper XML 需要先复制到 `target/classes` |
-| 编译方式 | `ide` | `ide` 调 `build.buildModule`；`maven` 只影响手动命令（自动编译始终走 IDE，避免 5 秒调用预算被 mvn 占满） |
-| Maven 编译参数 | `-q -DskipTests compile` | 手动 maven 模式使用 |
-| 自动编译防抖（毫秒） | 1200 | 连续保存合并成一次构建 |
-| 自动编译后回到编辑器 | 开 | 触发 IDE 构建后把焦点从 Build 窗口还给编辑器；Build 窗口仍会打开 |
-| 显示通知 | 开 | 只在错误/缺授权时提示；正常热更日志在 Run 控制台 |
+| 设置          | 默认                       | 说明                                                                          |
+| ----------- | ------------------------ | --------------------------------------------------------------------------- |
+| 保存后自动编译     | 开                        | 关闭后仍可用命令/快捷键手动编译                                                            |
+| XML 保存也触发构建 | 开                        | Mapper XML 需要先复制到 `target/classes`                                          |
+| 编译方式        | `ide`                    | `ide` 调 `build.buildModule`；`maven` 只影响手动命令（自动编译始终走 IDE，避免 5 秒调用预算被 mvn 占满） |
+| Maven 编译参数  | `-q -DskipTests compile` | 手动 maven 模式使用                                                               |
+| 自动编译防抖（毫秒）  | 1200                     | 连续保存合并成一次构建                                                                 |
+| 自动编译后回到编辑器  | 开                        | 触发 IDE 构建后把焦点从 Build 窗口还给编辑器；Build 窗口仍会打开                                   |
+| 显示通知        | 开                        | 只在错误/缺授权时提示；正常热更日志在 Run 控制台                                                 |
 
 ## Capabilities and security
 
@@ -188,14 +192,14 @@ There is no network capability and no telemetry. The bundled HotSwapAgent 2.0.5 
 测试工程：Spring Boot 3.4.3 + MyBatis-Plus 3.5.10.1 + H2，`DemoService` + `DemoMapper.xml`。
 每次只改文件、重新编译，进程 PID 始终不变。
 
-| 变更 | JDK 8 Corretto | JDK 17 JBR | JDK 21 Corretto | JDK 25 JBR |
-| --- | --- | --- | --- | --- |
-| 方法体 | ✅ `v3 → v4`（HA） | ✅ `v6 → v9`（HA） | ✅ `v9 → v10`（HA） | ✅ `v10 → v11`（HA） |
-| 新增 Controller 映射 | — | ✅ `/extra2` 200，带 `AllowEnhancedClassRedefinition` | ❌ 标准 JVM 不允许加方法 | ✅ 带参数（HA 同一路径） |
-| 加方法 / 字段 | ❌ 标准 JVM | ✅ 带 `AllowEnhancedClassRedefinition` | ❌ 标准 JVM | ✅ 带参数 |
-| Mapper XML | — | ✅ `XML2 → XML5` | ✅ `XML3 → XML4` | ✅ 自研 reloader |
-| 不加重定义参数时启动 | ✅ | ✅ | ✅ | ✅ |
-| HA Spring 插件初始化 | —（无 Spring） | ✅ Spring 6.2.3 | ✅ Spring 6.2.3 | ✅ Spring 6.2.3 |
+| 变更               | JDK 8 Corretto  | JDK 17 JBR                                         | JDK 21 Corretto  | JDK 25 JBR        |
+| ---------------- | --------------- | -------------------------------------------------- | ---------------- | ----------------- |
+| 方法体              | ✅ `v3 → v4`（HA） | ✅ `v6 → v9`（HA）                                    | ✅ `v9 → v10`（HA） | ✅ `v10 → v11`（HA） |
+| 新增 Controller 映射 | —               | ✅ `/extra2` 200，带 `AllowEnhancedClassRedefinition` | ❌ 标准 JVM 不允许加方法  | ✅ 带参数（HA 同一路径）    |
+| 加方法 / 字段         | ❌ 标准 JVM        | ✅ 带 `AllowEnhancedClassRedefinition`               | ❌ 标准 JVM         | ✅ 带参数             |
+| Mapper XML       | —               | ✅ `XML2 → XML5`                                    | ✅ `XML3 → XML4`  | ✅ 自研 reloader     |
+| 不加重定义参数时启动       | ✅               | ✅                                                  | ✅                | ✅                 |
+| HA Spring 插件初始化  | —（无 Spring）     | ✅ Spring 6.2.3                                     | ✅ Spring 6.2.3   | ✅ Spring 6.2.3    |
 
 结论：
 
@@ -265,41 +269,50 @@ JAVA=/path/to/jbr/bin/java ./test/structure.sh
 
 `structure.sh` 分成三个独立 JVM 组，失败的重定义不会污染下一组：
 
-| 修改类型 | JBR 17 结果 |
-| --- | --- |
-| 方法体 | ✅ |
-| 增加方法 + 字段 | ✅ |
-| 增加类注解（`@Deprecated`） | ✅ |
-| 增加接口 | ✅ |
-| 删除接口 | ❌ `attempted to change superclass or interfaces` |
-| 替换接口（`Marker` → `Marker2`） | ❌ 同上 |
-| 替换父类（`BaseA` → `BaseB`） | ❌ 同上 |
-| 删除方法 / 字段（切换到 interface 变体时） | ✅ |
+| 修改类型                         | JBR 17 结果                                        |
+| ---------------------------- | ------------------------------------------------ |
+| 方法体                          | ✅                                                |
+| 增加方法 + 字段                    | ✅                                                |
+| 增加类注解（`@Deprecated`）         | ✅                                                |
+| 增加接口                         | ✅                                                |
+| 删除接口                         | ❌ `attempted to change superclass or interfaces` |
+| 替换接口（`Marker` → `Marker2`）   | ❌ 同上                                             |
+| 替换父类（`BaseA` → `BaseB`）      | ❌ 同上                                             |
+| 删除方法 / 字段（切换到 interface 变体时） | ✅                                                |
 
 `test/jdk-matrix.sh` 默认用 `/usr/libexec/java_home -V` 发现的 JDK；也可以指定：
 
 ```bash
-JDK_MATRIX_HOMES="$JAVA8:$JAVA11:$JBR17:$JAVA21" ./test/jdk-matrix.sh
+# 也可以把下载的 JBR 目录交给脚本
+JBR_MATRIX_DIR=/path/to/jbr ./test/jdk-matrix.sh
+
+# 或显式指定所有 JDK
+JDK_MATRIX_HOMES="$JAVA8:$JAVA11:$JBR17:$JBR21:$JBR25:$JAVA21:$JAVA25" \
+  ./test/jdk-matrix.sh
 ```
 
 `test/jdk-matrix.sh` 每次运行都会重新生成下表：
 
 <!-- BEGIN JDK-MATRIX -->
 <!-- generated by test/jdk-matrix.sh; do not edit by hand -->
-| 修改 | JDK 8 | JDK 11 | JBR 17 | JDK 21 | JDK 25 |
-| --- | --- | --- | --- | --- | --- |
-| 方法体 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Mapper XML | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 增加方法/字段 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ✅ | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） |
-| 增加类注解 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ✅ | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） |
-| 增加接口 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ✅ | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） |
-| 删除方法/字段 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ✅ | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） |
-| 删除接口 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ❌ 层次变更不支持 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） |
-| 替换接口 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ❌ 层次变更不支持 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） |
-| 替换父类 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ❌ 层次变更不支持 | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） |
+| 修改         | JDK 8        | JDK 11       | JBR 17    | JBR 21    | JDK 21       | JBR 25    | JDK 25       |
+| ---------- | ------------ | ------------ | --------- | --------- | ------------ | --------- | ------------ |
+| 方法体        | ✅            | ✅            | ✅         | ✅         | ✅            | ✅         | ✅            |
+| Mapper XML | ✅            | ✅            | ✅         | ✅         | ✅            | ✅         | ✅            |
+| 增加方法/字段    | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ✅         | ✅         | ❌ 未测试（需 JBR） | ✅         | ❌ 未测试（需 JBR） |
+| 增加类注解      | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ✅         | ✅         | ❌ 未测试（需 JBR） | ✅         | ❌ 未测试（需 JBR） |
+| 增加接口       | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ✅         | ✅         | ❌ 未测试（需 JBR） | ✅         | ❌ 未测试（需 JBR） |
+| 删除方法/字段    | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ✅         | ✅         | ❌ 未测试（需 JBR） | ✅         | ❌ 未测试（需 JBR） |
+| 删除接口       | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ❌ 层次变更不支持 | ✅         | ❌ 未测试（需 JBR） | ✅         | ❌ 未测试（需 JBR） |
+| 替换接口       | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ❌ 层次变更不支持 | ✅         | ❌ 未测试（需 JBR） | ✅         | ❌ 未测试（需 JBR） |
+| 替换父类       | ❌ 未测试（需 JBR） | ❌ 未测试（需 JBR） | ❌ 层次变更不支持 | ❌ 层次变更不支持 | ❌ 未测试（需 JBR） | ❌ 层次变更不支持 | ❌ 未测试（需 JBR） |
 <!-- END JDK-MATRIX -->
 
 图例：✅ 通过；❌ 失败或未测试。**方法体 / Mapper XML** 行不添加 `-XX:+AllowEnhancedClassRedefinition`；**结构变更**行只在支持该参数的 JBR 上执行并自动添加该参数。JDK 8 / 11 / 21 / 25 的结构变更单元格是“未执行”，不是“带参数测试失败”。
+
+JBR 版本差异：JBR 17 上删除/替换接口仍失败；JBR 21 / 25 上删除/替换接口通过，但**替换父类**在三个 JBR 上都失败。测试用的 JBR 21 / 25 是自行下载的：
+`/Users/a1/Desktop/qy/soft/jbr/jbr-21.0.9-osx-aarch64-b1038.91` 和
+`/Users/a1/Desktop/qy/soft/jbr/jbr-25.0.5.0.3-osx-aarch64-b700.17`。
 
 JDK 8 使用 fixture 的 `jdk8` Maven profile，自动切到 H2 1.4.200；其他 JDK 使用 H2 2.3。
 
@@ -347,17 +360,17 @@ Java 11，JDK 8 的类重定义已单独验证）。
 
 agent 源码在 `agent/src/com/hotreload/agent/`：
 
-| 文件 | 作用 |
-| --- | --- |
-| `HotReloadPremain` | `premain` / `agentmain` 入口 |
-| `Agent` | 打开 JDK 模块、启动 HA 2.0.5、注册 transformer、启动 XML watcher |
-| `JdkModuleOpens` | `Instrumentation.redefineModule` 打开 `java.lang` / `java.beans` 等包，替代 `--add-opens` |
-| `HotswapSpringPatch` | 关掉 HA 的 Spring XML 资源监听，避免 mapper XML 被当成 Spring bean 定义 |
-| `Watcher` | 轮询输出目录；HA 模式下只处理 XML，回退模式处理 class + XML |
-| `ClassRedefiner` | HA 不可用时的回退 `redefineClasses`，结构变更失败时给出 JBR 修复步骤 |
-| `MyBatisConfigTransformer` | 给 `addMappedStatement` 注入注册调用（ASM） |
-| `MyBatisConfigRegistry` | 活着的 `Configuration` 弱引用列表 |
-| `MyBatisXmlReloader` | 按 namespace 清旧条目、`XMLMapperBuilder` 重解析、失败回滚 |
+| 文件                         | 作用                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| `HotReloadPremain`         | `premain` / `agentmain` 入口                                                         |
+| `Agent`                    | 打开 JDK 模块、启动 HA 2.0.5、注册 transformer、启动 XML watcher                                |
+| `JdkModuleOpens`           | `Instrumentation.redefineModule` 打开 `java.lang` / `java.beans` 等包，替代 `--add-opens` |
+| `HotswapSpringPatch`       | 关掉 HA 的 Spring XML 资源监听，避免 mapper XML 被当成 Spring bean 定义                           |
+| `Watcher`                  | 轮询输出目录；HA 模式下只处理 XML，回退模式处理 class + XML                                            |
+| `ClassRedefiner`           | HA 不可用时的回退 `redefineClasses`，结构变更失败时给出 JBR 修复步骤                                    |
+| `MyBatisConfigTransformer` | 给 `addMappedStatement` 注入注册调用（ASM）                                                 |
+| `MyBatisConfigRegistry`    | 活着的 `Configuration` 弱引用列表                                                          |
+| `MyBatisXmlReloader`       | 按 namespace 清旧条目、`XMLMapperBuilder` 重解析、失败回滚                                       |
 
 ## 许可
 

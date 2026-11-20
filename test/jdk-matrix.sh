@@ -17,6 +17,11 @@ else
   done < <(/usr/libexec/java_home -V 2>&1 | awk '{print $NF}' | sort -u)
   extra="/Users/a1/Library/Application Support/ai.l0ng.openidea/language-server-runtimes/temurin-25.0.5/Contents/Home"
   [ -x "$extra/bin/java" ] && homes+=("$extra")
+  if [ -n "${JBR_MATRIX_DIR:-}" ]; then
+    for home in "$JBR_MATRIX_DIR"/*/Contents/Home; do
+      [ -x "$home/bin/java" ] && homes+=("$home")
+    done
+  fi
 fi
 
 if [ "${#homes[@]}" -eq 0 ]; then
