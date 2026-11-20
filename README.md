@@ -189,21 +189,21 @@ Each case starts a fresh JVM. Method body and Mapper XML do not use `-XX`; struc
 
 #### Standard JDK
 
-| Operation | JDK 8 | JDK 11 | JDK 21 | JDK 25 |
-| --- | --- | --- | --- | --- |
-| Method body | ✅ | ✅ | ✅ | ✅ |
-| Mapper XML | ✅ | ✅ | ✅ | ✅ |
-| Add method | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
-| Remove method | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
-| Add field | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
-| Remove field | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
-| Add class annotation | ✅ | ✅ | ✅ | ✅ |
-| Remove class annotation | ✅ | ✅ | ✅ | ✅ |
-| Add interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
-| Remove interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
-| Replace interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
-| Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
-| Change method signature | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Operation | JDK 8 | JDK 11 | JDK 17 | JDK 21 | JDK 25 |
+| --- | --- | --- | --- | --- | --- |
+| Method body | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Mapper XML | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Add method | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Remove method | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Add field | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Remove field | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Add class annotation | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Remove class annotation | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Add interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Remove interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Replace interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Change method signature | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
 
 #### JBR
 
