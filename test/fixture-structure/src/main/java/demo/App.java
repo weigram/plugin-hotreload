@@ -3,6 +3,11 @@ package demo;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 
 /**
  * Prints observable state once a second. The running instance is created once,
@@ -12,9 +17,17 @@ public final class App {
 
     public static void main(String[] args) throws Exception {
         Target target = new Target();
+        Path stateFile = Paths.get(System.getProperty("stateFile", "target/ide-state.txt"));
         System.out.println("### STARTED pid=" + ManagementFactory.getRuntimeMXBean().getName());
         while (true) {
-            System.out.println(state(target));
+            String state = state(target);
+            System.out.println(state);
+            try {
+                Files.write(stateFile, (state + "\n").getBytes(StandardCharsets.UTF_8),
+                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            } catch (Exception ignored) {
+                // Console output is the fallback when the state file cannot be written.
+            }
             Thread.sleep(500L);
         }
     }

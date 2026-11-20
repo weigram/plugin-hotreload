@@ -13,6 +13,9 @@ FIXTURE="$PWD/fixture"
 AGENT="$(cd .. && pwd)/agent/hotreload-agent.jar"
 
 JAVA="${JAVA:-java}"
+if [ "$JAVA" != "java" ]; then
+  export JAVA_HOME="$(cd "$(dirname "$JAVA")/.." && pwd)"
+fi
 JAVAC="${JAVAC:-javac}"
 MVN="${MVN:-mvn}"
 LOG="$FIXTURE/target/agent-e2e.log"
@@ -43,13 +46,6 @@ wait_for() {
   done
   return 1
 }
-
-JAVA_MAJOR="$("$JAVA" -version 2>&1 | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' | head -1)"
-if [ "${JAVA_MAJOR:-0}" -lt 11 ]; then
-  echo "SKIP: the fixture's H2 2.3 needs Java 11+; JDK 8 class reload was verified manually"
-  echo "      (see README: JDK 8 Corretto, method body v3 -> v4)."
-  exit 0
-fi
 
 echo "== build fixture =="
 ( cd "$FIXTURE" && "$MVN" -B -q -DskipTests clean compile dependency:build-classpath \

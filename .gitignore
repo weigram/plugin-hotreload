@@ -11,3 +11,6 @@
 # Publisher signing keys must never be committed
 *.key
 /dist/*.oiplugin
+
+# IDE-local run configuration created by the manual OpenIDEA test
+/test/fixture-structure/.openidea/
