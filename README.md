@@ -246,6 +246,26 @@ Each case starts a fresh JVM. Method body and Mapper XML do not use `-XX`; struc
 | Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
 | Change method signature | ✅ | ✅ | ✅ |
 
+#### DCEVM
+
+| Operation | DCEVM 8u282 | DCEVM 11.0.15+1 |
+| --- | --- | --- |
+| Method body | ✅ | ✅ |
+| Mapper XML | ✅ | ✅ |
+| Add method | ✅ | ✅ |
+| Remove method | ✅ | ✅ |
+| Add field | ✅ | ✅ |
+| Remove field | ✅ | ✅ |
+| Add class annotation | ✅ | ✅ |
+| Remove class annotation | ✅ | ✅ |
+| Add interface | ✅ | ✅ |
+| Remove interface | ❌ hierarchy change | ❌ hierarchy change |
+| Replace interface | ❌ hierarchy change | ❌ hierarchy change |
+| Replace superclass | ❌ hierarchy change | ❌ hierarchy change |
+| Change method signature | ✅ | ✅ |
+
+DCEVM 8u282 and 11.0.15+1 are macOS x86_64 builds; they were run on Apple Silicon through Rosetta. Their structural behavior matches JBR 17: add/remove methods and fields, annotations, add interfaces, and method-signature changes pass; removing/replacing interfaces and replacing a superclass fail.
+
 Test commands:
 
 ```bash
@@ -256,8 +276,9 @@ JAVA=/path/to/jbr/bin/java ./test/structure.sh
 # deferred XML error rollback + per-Configuration targeting
 ./test/reloader-regression.sh
 
-# per-operation probe; use any JDK or JBR
+# per-operation probe; use a JDK, JBR, or DCEVM
 JAVA=/path/to/jdk/bin/java ./test/capability.sh
+JAVA=/path/to/dcevm/bin/java ./test/capability.sh
 
 JBR_MATRIX_DIR=/path/to/jbr ./test/jdk-matrix.sh
 ```

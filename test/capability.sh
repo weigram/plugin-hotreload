@@ -25,7 +25,14 @@ LOG_MARK=0
 PASS=0
 FAIL=0
 
-if "$JAVA" -XX:+AllowEnhancedClassRedefinition -version >/dev/null 2>&1; then
+VERSION="$("$JAVA" -version 2>&1)"
+if printf '%s\n' "$VERSION" | grep -q 'Dynamic Code Evolution'; then
+  MODE=DCEVM
+  FLAGS=(-XX:+AllowEnhancedClassRedefinition)
+elif printf '%s\n' "$VERSION" | grep -q 'JBR'; then
+  MODE=JBR
+  FLAGS=(-XX:+AllowEnhancedClassRedefinition)
+elif "$JAVA" -XX:+AllowEnhancedClassRedefinition -version >/dev/null 2>&1; then
   MODE=JBR
   FLAGS=(-XX:+AllowEnhancedClassRedefinition)
 else

@@ -1,3 +1,7 @@
+---
+domd-id: 53407ed5-e8e0-47f3-ab2d-d206a362d970
+---
+
 [English](README.md) | 简体中文
 
 
@@ -278,6 +282,26 @@ There is no network capability and no telemetry. The bundled HotSwapAgent 2.0.5 
 | 替换父类       | ❌ 层次变更 | ❌ 层次变更 | ❌ 层次变更 |
 | 修改方法签名     | ✅      | ✅      | ✅      |
 
+### DCEVM
+
+| 操作         | DCEVM 8u282 | DCEVM 11.0.15+1 |
+| ---------- | ----------- | --------------- |
+| 方法体        | ✅           | ✅               |
+| Mapper XML | ✅           | ✅               |
+| 增加方法       | ✅           | ✅               |
+| 删除方法       | ✅           | ✅               |
+| 增加字段       | ✅           | ✅               |
+| 删除字段       | ✅           | ✅               |
+| 增加类注解      | ✅           | ✅               |
+| 删除类注解      | ✅           | ✅               |
+| 增加接口       | ✅           | ✅               |
+| 删除接口       | ❌ 层次变更      | ❌ 层次变更          |
+| 替换接口       | ❌ 层次变更      | ❌ 层次变更          |
+| 替换父类       | ❌ 层次变更      | ❌ 层次变更          |
+| 修改方法签名     | ✅           | ✅               |
+
+DCEVM 8u282 / 11.0.15+1 均为 macOS x86_64 构建，本机是 Apple Silicon，通过 Rosetta 运行。两者的结构能力与 JBR 17 一致：增删方法/字段、类注解、增加接口、修改方法签名可用；删除/替换接口和替换父类仍失败。
+
 结论：
 
 - **方法体在 JDK 8–25 上开箱可用**，不需要 `-XX`；Mapper XML 由自研 reloader 处理，也不需要 `-XX`。
@@ -285,6 +309,7 @@ There is no network capability and no telemetry. The bundled HotSwapAgent 2.0.5 
 - **增删方法/字段、修改方法签名**在标准 JDK 上失败；JBR 17 / 21 / 25 都通过。方法签名改变后旧方法被替换，调用方需要按新签名重新编译。
 - **增加接口**在 JBR 17 / 21 / 25 都可用；**删除/替换接口**在 JBR 17 上仍失败，在 JBR 21 / 25 上通过。
 - **替换父类**在三个 JBR 版本上都失败，需要重启；这是 JVM 的结构限制。
+- **DCEVM 8u282 / 11.0.15+1** 的结构能力与 JBR 17 一致：增删方法/字段、类注解、增加接口、修改方法签名可用；删除/替换接口、替换父类失败。两者是 x86_64 构建，在 Apple Silicon 上通过 Rosetta 运行。
 - Mapper XML 解析失败时，agent 会恢复旧 statement 并打印错误，应用继续可用。
 - **Spring bean / controller / AOP** 由 HA 2.0.5 的 Spring 插件 reprocess；实测新增 `@GetMapping` 后直接返回 200，不需要重启。
 - **Spring XML 配置（`applicationContext.xml`）不热更**：为了保证 mapper XML 不被 HA 当成 Spring bean 定义解析，agent 关闭了 HA 的 `registerResourceListeners`。Java Config / Spring Boot 项目不受影响。
@@ -334,14 +359,15 @@ JAVA=/path/to/jbr/bin/java ./test/structure.sh
 # 延迟解析错误回滚 + 按 Configuration 定向刷新（issue #1 回归）
 ./test/reloader-regression.sh
 
-# 按操作类型逐个测试；常规 JDK 或 JBR 都可用
+# 按操作类型逐个测试；常规 JDK、JBR 或 DCEVM 都可用
 JAVA=/path/to/jdk/bin/java ./test/capability.sh
+JAVA=/path/to/dcevm/bin/java ./test/capability.sh
 
 # 对每个已安装 JDK 分别跑 e2e/structure
 ./test/jdk-matrix.sh
 ```
 
-`structure.sh` 分成三个独立 JVM 组，失败的重定义不会污染下一组；`reloader-regression.sh` 覆盖 issue #1 的延迟错误回滚和按 Configuration 定向刷新；完整矩阵由 `test/jdk-matrix.sh` 生成。
+`structure.sh` 分成三个独立 JVM 组，失败的重定义不会污染下一组；`reloader-regression.sh` 覆盖 issue #1 的延迟错误回滚和按 Configuration 定向刷新；`capability.sh` 逐个操作测试常规 JDK / JBR / DCEVM；完整矩阵由 `test/jdk-matrix.sh` 生成。
 
 `test/jdk-matrix.sh` 默认用 `/usr/libexec/java_home -V` 发现的 JDK；也可以指定：
 
