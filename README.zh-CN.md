@@ -18,48 +18,16 @@ HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=
 `-XX:+AllowEnhancedClassRedefinition`（JBR 17 实测通过）。**删除接口、替换接口、替换父类仍会报
 `attempted to change superclass or interfaces`**，需要重启。
 
-## 它解决什么问题
+## 特性
 
-设置项和交互参考了 [HotSwapHelper](https://gitee.com/gejun123456/HotSwapHelper) 的
-issues；下面是这些 issue 在 OpenIDEA 里的对应做法：
-
-| HotSwapHelper issue                                                                 | 原问题                                                              | 本插件                                                                                                                    |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [IBSM5Y](https://gitee.com/gejun123456/HotSwapHelper/issues/IBSM5Y) 自动热更新           | 每次都要手动 Ctrl+F9                                                   | 监听 `files-changed`，保存 `.java` / mapper `.xml` 后自动触发 IDE 的 Build Module（1.2s 防抖）                                        |
-| [IAYBKM](https://gitee.com/gejun123456/HotSwapHelper/issues/IAYBKM) XML 没生效         | 外部 agent / 版本 bug，namespace 没刷新                                  | agent 内置 XML 刷新：按 namespace 清掉旧 statement / resultMap / sqlFragment，再用 MyBatis 自己的 `XMLMapperBuilder` 重新解析；解析失败自动回滚旧语句 |
-| [IBEIL6](https://gitee.com/gejun123456/HotSwapHelper/issues/IBEIL6) 插件启动异常          | MyBatis 与 MyBatis-Plus 代理类冲突                                     | 不改 MyBatis 的 Mapper 代理，只给 `Configuration.addMappedStatement` 注入一行注册调用；MyBatis-Plus 的 `MybatisConfiguration` 也覆盖到       |
-| [IAUQWJ](https://gitee.com/gejun123456/HotSwapHelper/issues/IAUQWJ) 普通 Application  | 只支持特定启动方式                                                        | `javaAgents` 覆盖 Application、Spring Boot、JAR Application 三种配置，Run/Debug 都注入                                             |
-| [IANMWH](https://gitee.com/gejun123456/HotSwapHelper/issues/IANMWH) 兼容 PageHelper   | 需要换特殊 agent                                                      | 不碰 MyBatis 内部执行链和代理，PageHelper 的 Interceptor 不受影响                                                                      |
-| [IANCYU](https://gitee.com/gejun123456/HotSwapHelper/issues/IANCYU) JDK 21 不支持      | 普通 JDK 不认识 `-XX:HotswapAgent` / `AllowEnhancedClassRedefinition` | 默认不生成任何 `-XX`；方法体和 XML 在 Corretto/MS JDK 21 上直接可用。增强重定义参数只在需要结构热更时手动加                                                  |
-| [ICT2OU](https://gitee.com/gejun123456/HotSwapHelper/issues/ICT2OU) Spring Debugger | 生态集成                                                             | 本插件走标准 `java.instrument`，和 IDE 自己的 debug / HotSwap 互不依赖；调试启动同样注入                                                       |
-
-## 与 HotSwapHelper 源码的关系
-
-本插件**没有复制** HotSwapHelper 的代码。最初只读了它的 issues；1.0.1 完成后又读了
-v1.1.7（commit `3ead869`）的源码做对照。两者解决同一个问题，但架构不同：
-
-| 方面           | HotSwapHelper 源码                                                             | 本插件                                                                                                                                |
-| ------------ | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| agent 注入     | 自定义 `HotSwapDebugExecutor` + `JavaProgramPatcher`，只对 “Debug with Hotswap” 生效 | OpenIDEA `[[contributes.javaAgents]]`，Application / Spring Boot / JAR Application 的 Run 和 Debug 都自动注入                              |
-| 热更实现         | 内置 `hotswap-agent.jar`，依赖 HA 的 Spring/MyBatis 插件                             | 合并 HA 2.0.5 作为类/Spring 内核；XML 由自研 reloader 负责，HA MyBatis/MyBatis-Plus/WatchResources 插件关闭                                          |
-| JDK 要求       | JDK 8 需要 DCEVM；11/17 需要 JBR/HA jar，并加 `-XX:HotswapAgent=external` 等          | HA 直接以 `premain` 启动；方法体 / XML 在 JDK 8–25 上不需要 `-XX`；只有增删方法/字段才需要 JBR 的 `AllowEnhancedClassRedefinition`；JDK 模块 opens 由 agent 运行时完成 |
-| 自动热更         | 检查 IDEA 的 `RUN_HOTSWAP_AFTER_COMPILE`，没有文件监听（issue IBSM5Y 仍开放）               | 监听 `files-changed`，保存后自动 Build Module                                                                                              |
-| 右键 Run/Debug | 只有 Run Dashboard 工具栏的 “Debug with Hotswap” action                            | 编辑器 / 标签页 / 项目树右键只保留 Run、Debug，调用 IDE 自己的上下文运行                                                                                     |
-| agent 文件     | 启动时复制到 `~/.hotswap/hotswap-agent.jar`                                        | HA + 自研代码合并成一个 jar，留在插件包内，由 IDE 按哈希校验；构建可复现                                                                                        |
-| 设置           | 外部 agent、禁用 HA 插件、不检查 JDK、旧 debugger agent                                   | 自动编译、XML 构建、防抖、通知、maven 兜底                                                                                                         |
-
-`HotSwapHelper-master/` 是你放进来的只读参考源码，已加入 `.gitignore`，不会进入 `.oiplugin`；
-本插件没有从它复制代码。
-
-OpenIDEA 没有 `JavaProgramPatcher` / 自定义 `Executor` 扩展点，所以不能照搬
-HotSwapHelper 的注入方式；`javaAgents` 是平台提供的等价机制。HotSwapHelper 的
-`-XX:HotswapAgent=external` 正是 JDK 21 报 `Unrecognized VM option` 的来源（issue
-IANCYU），本插件刻意不生成它，而是直接调用 HA 的 `premain`。
-
-差异点：HA 的 Spring 插件会把 classpath 上所有 `*.xml` 当 Spring bean 定义；mapper XML
-会触发 `try to add xml` 错误。本插件在 agent 里把 `SpringPlugin.registerResourceListeners`
-替换成空方法，只关闭 **Spring XML 配置** 热更，保留类监听、bean/controller reprocess 和 AOP。
-代价是 `applicationContext.xml` 这类 Spring XML 配置改动不再热更（Java Config / Spring Boot 项目通常不用）。
+- **保存即热更**：保存 Java 文件或 MyBatis Mapper XML 后自动触发 IDE 构建，agent 在运行中的 JVM 里重定义类或刷新 Mapper 语句；Run 和 Debug 都生效，应用不重启。
+- **JDK 8–25**：方法体和 Mapper XML 在 JDK 8 / 11 / 17 / 21 / 25 上可用，不需要额外 VM 参数。
+- **Spring 支持**：HotSwapAgent 2.0.5 负责类重定义和 Spring bean / controller / AOP 的 reprocess。
+- **MyBatis / MyBatis-Plus**：自研 XML reloader 按 namespace 清旧语句、重新解析，失败回滚；不修改 Mapper 代理链，只给 `Configuration.addMappedStatement` 注入注册调用，兼容现有 MyBatis-Plus、PageHelper、Flowable 代理。
+- **结构热更**：JBR + `-XX:+AllowEnhancedClassRedefinition` 下支持增删方法/字段、增加类注解、增加接口；JBR 21/25 还支持删除/替换接口。替换父类仍不支持，需要重启。
+- **无额外 agent**：不需要外部 `hotswap-agent-2.0.5.jar`，不需要 `-XX:HotswapAgent=external`，也不需要 `--add-opens`。
+- **IDE 集成**：`javaAgents` 自动覆盖 Application / Spring Boot / JAR Application；保留 Run/Debug 右键；自动编译带防抖，构建后焦点回到编辑器。
+- **诊断与兜底**：内置授权/项目 JDK/输出目录诊断、复制增强 VM 参数；HA 启动失败时回退自研 `ClassRedefiner`，方法体和 XML 仍可用。
 
 ## 组成
 
@@ -272,8 +240,7 @@ There is no network capability and no telemetry. The bundled HotSwapAgent 2.0.5 
 - **删除接口 / 替换接口 / 替换父类仍不支持**：JBR 17 实测可以**增加**接口，但删除
   `implements Marker`、把 `implements A` 换成 `implements B`，或把 `extends BaseA`
   换成 `extends BaseB` 都会报 `class redefinition failed: attempted to change superclass
-  or interfaces`，需要重启。这是 JVM 的结构限制；HotSwapHelper 的 README 也把层次替换
-  列为不支持操作。
+  or interfaces`，需要重启。这是 JVM 的结构限制。
 - Mapper XML 解析失败时，agent 会恢复旧 statement 并打印错误，应用继续可用。
 - **Spring XML 配置（`applicationContext.xml`）不热更**：为了保证 mapper XML 不被 HA 当成
   Spring bean 定义解析，agent 关闭了 HA 的 `registerResourceListeners`。Java Config /
