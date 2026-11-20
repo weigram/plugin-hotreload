@@ -42,6 +42,18 @@ The HotSwapAgent jar is not started as a second agent. `agent/package.py` unpack
 - **Configuration.** The plugin passes `autoHotswap=true`, `disablePlugin=MyBatis`, `disablePlugin=MyBatisPlus`, `disablePlugin=WatchResources`, and `LOGGER=info`. It does not use `-XX:HotswapAgent=external`.
 - **License.** HA 2.0.5 is GPL-2.0 and is kept unmodified inside the merged jar; the plugin's own code and the HA jar are both distributed under GPL-2.0.
 
+#### Why HA's MyBatis / MyBatis-Plus plugins are disabled
+
+The plugin keeps exactly one owner for mapper XML: its own `MyBatisXmlReloader`. Enabling HA's MyBatis plugins as well would create two independent reload paths for the same files.
+
+- **Duplicate parsing.** Both paths watch mapper XML and call MyBatis parsing/building code. A namespace is then registered twice, which can produce `Mapped Statements collection already contains value for ...`, duplicate `resultMap`/`sqlFragment` entries, or a half-updated namespace.
+- **No shared rollback.** This plugin clears a namespace and reparses it with `XMLMapperBuilder`; on failure it restores the previous statements. HA's MyBatis plugin has its own reload model and does not know about this registry/rollback, so a failed parse in one path can leave the other path inconsistent.
+- **Proxy and registry conflicts.** MyBatis-Plus uses `MybatisConfiguration` and `MybatisMapperRegistry`; HA's MyBatis/MyBatis-Plus plugins also instrument MyBatis configuration and mapper registration. Layering both on top of existing mapper proxies, PageHelper or Flowable interceptors can duplicate registration or wrap the proxy chain twice.
+- **No proxy layer from this plugin.** This plugin deliberately does not create mapper proxies. It only injects one registration call into `Configuration.addMappedStatement` with ASM, so disabling HA's MyBatis plugins keeps the original MyBatis / MyBatis-Plus proxy chain intact.
+- **`WatchResources`.** HA's resource watcher would trigger additional reloads for the same mapper files. It is disabled for the same single-owner reason; the plugin's own XML watcher handles `target/classes/mapper/*.xml`.
+
+The HA class-redefinition and Spring plugins remain enabled. Mapper interface class changes are still handled by the normal class-redefinition path, while mapper XML is owned by the custom reloader.
+
 ```text
 save file
    |
