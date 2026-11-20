@@ -240,48 +240,66 @@ There is no network capability and no telemetry. The bundled HotSwapAgent 2.0.5 
 
 ## 能力边界（实测）
 
-测试工程：Spring Boot 3.4.3 + MyBatis-Plus 3.5.10.1 + H2，`DemoService` + `DemoMapper.xml`。
-每次只改文件、重新编译，进程 PID 始终不变。
+测试工程：`test/fixture-structure`。每个 case 启动一个**全新的 JVM**，修改后重新编译；进程 PID 始终不变。方法体 / Mapper XML 不添加 `-XX`；结构变更只在 JBR 上带 `-XX:+AllowEnhancedClassRedefinition`。以下结果来自 `test/capability.sh` 的直接测试。
 
-| 变更               | JDK 8 Corretto  | JDK 17 JBR                                         | JDK 21 Corretto  | JDK 25 JBR        |
-| ---------------- | --------------- | -------------------------------------------------- | ---------------- | ----------------- |
-| 方法体              | ✅ `v3 → v4`（HA） | ✅ `v6 → v9`（HA）                                    | ✅ `v9 → v10`（HA） | ✅ `v10 → v11`（HA） |
-| 新增 Controller 映射 | —               | ✅ `/extra2` 200，带 `AllowEnhancedClassRedefinition` | ❌ 标准 JVM 不允许加方法  | ✅ 带参数（HA 同一路径）    |
-| 加方法 / 字段         | ❌ 标准 JVM        | ✅ 带 `AllowEnhancedClassRedefinition`               | ❌ 标准 JVM         | ✅ 带参数             |
-| Mapper XML       | —               | ✅ `XML2 → XML5`                                    | ✅ `XML3 → XML4`  | ✅ 自研 reloader     |
-| 不加重定义参数时启动       | ✅               | ✅                                                  | ✅                | ✅                 |
-| HA Spring 插件初始化  | —（无 Spring）     | ✅ Spring 6.2.3                                     | ✅ Spring 6.2.3   | ✅ Spring 6.2.3    |
+### 常规 JDK（非 JBR）
+
+| 操作         | JDK 8    | JDK 11   | JDK 21   | JDK 25   |
+| ---------- | -------- | -------- | -------- | -------- |
+| 方法体        | ✅        | ✅        | ✅        | ✅        |
+| Mapper XML | ✅        | ✅        | ✅        | ✅        |
+| 增加方法       | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 |
+| 删除方法       | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 |
+| 增加字段       | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 |
+| 删除字段       | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 |
+| 增加类注解      | ✅        | ✅        | ✅        | ✅        |
+| 删除类注解      | ✅        | ✅        | ✅        | ✅        |
+| 增加接口       | ❌ 层次变更   | ❌ 层次变更   | ❌ 层次变更   | ❌ 层次变更   |
+| 删除接口       | ❌ 层次变更   | ❌ 层次变更   | ❌ 层次变更   | ❌ 层次变更   |
+| 替换接口       | ❌ 层次变更   | ❌ 层次变更   | ❌ 层次变更   | ❌ 层次变更   |
+| 替换父类       | ❌ 层次变更   | ❌ 层次变更   | ❌ 层次变更   | ❌ 层次变更   |
+| 修改方法签名     | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 | ❌ JVM 拒绝 |
+
+### JBR（JetBrains Runtime）
+
+| 操作         | JBR 17 | JBR 21 | JBR 25 |
+| ---------- | ------ | ------ | ------ |
+| 方法体        | ✅      | ✅      | ✅      |
+| Mapper XML | ✅      | ✅      | ✅      |
+| 增加方法       | ✅      | ✅      | ✅      |
+| 删除方法       | ✅      | ✅      | ✅      |
+| 增加字段       | ✅      | ✅      | ✅      |
+| 删除字段       | ✅      | ✅      | ✅      |
+| 增加类注解      | ✅      | ✅      | ✅      |
+| 删除类注解      | ✅      | ✅      | ✅      |
+| 增加接口       | ✅      | ✅      | ✅      |
+| 删除接口       | ❌ 层次变更 | ✅      | ✅      |
+| 替换接口       | ❌ 层次变更 | ✅      | ✅      |
+| 替换父类       | ❌ 层次变更 | ❌ 层次变更 | ❌ 层次变更 |
+| 修改方法签名     | ✅      | ✅      | ✅      |
 
 结论：
 
-- **方法体在 JDK 8–25 上开箱可用**，不需要 `-XX`；XML 在 JDK 17 / 21 / 25 实测
-  （plain MyBatis 与 MyBatis-Plus 各一套），同一份 agent 不做版本分支。
-- **Spring bean / controller / AOP 由 HA 2.0.5 的 Spring 插件 reprocess**：新增
-  `@GetMapping`、改 controller 方法、AOP 注解等走 HA 的 class listener；实测新增
-  `/extra2` 后直接返回 200，不需要重启。
-- **增删方法/字段**需要 JetBrains Runtime，并在运行配置 VM options 里加
-  `-XX:+AllowEnhancedClassRedefinition`。右键 **Run Current File** 用的是 IDE 的临时
-  Application 配置；要让临时配置也继承这个参数，把它加到
-  `Edit Configurations → Edit configuration templates → Application → VM options`。
-  这是 JVM 能力，不是插件能绕过的；加方法失败时
-  HA 会在控制台打印 `attempted to add a method`，本插件的 doctor 也会提示。方法体热更不需要
-  这个参数。
-- **删除接口 / 替换接口 / 替换父类仍不支持**：JBR 17 实测可以**增加**接口，但删除
-  `implements Marker`、把 `implements A` 换成 `implements B`，或把 `extends BaseA`
-  换成 `extends BaseB` 都会报 `class redefinition failed: attempted to change superclass
-  or interfaces`，需要重启。这是 JVM 的结构限制。
+- **方法体在 JDK 8–25 上开箱可用**，不需要 `-XX`；Mapper XML 由自研 reloader 处理，也不需要 `-XX`。
+- **类注解的增删在标准 JDK 上也可用**（实测 JDK 8 / 11 / 21 / 25 都通过）；JBR 上同样可用。
+- **增删方法/字段、修改方法签名**在标准 JDK 上失败；JBR 17 / 21 / 25 都通过。方法签名改变后旧方法被替换，调用方需要按新签名重新编译。
+- **增加接口**在 JBR 17 / 21 / 25 都可用；**删除/替换接口**在 JBR 17 上仍失败，在 JBR 21 / 25 上通过。
+- **替换父类**在三个 JBR 版本上都失败，需要重启；这是 JVM 的结构限制。
 - Mapper XML 解析失败时，agent 会恢复旧 statement 并打印错误，应用继续可用。
-- **Spring XML 配置（`applicationContext.xml`）不热更**：为了保证 mapper XML 不被 HA 当成
-  Spring bean 定义解析，agent 关闭了 HA 的 `registerResourceListeners`。Java Config /
-  Spring Boot 项目不受影响；如果用 XML 声明 bean，改完需要重启。
-- **MyBatis / MyBatis-Plus 的 HA 插件关闭**：mapper XML 由自研 reloader 处理；mapper
-  接口本身的增删方法走 HA 类重定义，但 MyBatis 的 mapper 注册是否刷新未单独回归，建议
-  XML 与接口一起改时重启确认。
-- 改**方法签名**、record 组件：正在执行的调用点仍指向旧结构，等同于需要重启。
-- `@Value` / `@ConfigurationProperties` 的重新绑定由 HA 的 Spring 插件尝试处理，未单独回归；
-  新增 Bean 定义通常仍建议重启。
-- IDE 的 `javaAgents` 不覆盖 Maven/Gradle goal、JUnit、Tomcat、远程 JVM；这些启动方式
-  如果确实需要，得自己加 `-javaagent`。
+- **Spring bean / controller / AOP** 由 HA 2.0.5 的 Spring 插件 reprocess；实测新增 `@GetMapping` 后直接返回 200，不需要重启。
+- **Spring XML 配置（`applicationContext.xml`）不热更**：为了保证 mapper XML 不被 HA 当成 Spring bean 定义解析，agent 关闭了 HA 的 `registerResourceListeners`。Java Config / Spring Boot 项目不受影响。
+- **MyBatis / MyBatis-Plus 的 HA 插件关闭**：mapper XML 由自研 reloader 处理；mapper 接口本身的增删方法走 HA 类重定义，但 MyBatis 的 mapper 注册是否刷新未单独回归。
+- `@Value` / `@ConfigurationProperties` 的重新绑定由 HA 的 Spring 插件尝试处理，未单独回归；新增 Bean 定义通常仍建议重启。
+- IDE 的 `javaAgents` 不覆盖 Maven/Gradle goal、JUnit、Tomcat、远程 JVM；这些启动方式如果确实需要，得自己加 `-javaagent`。
+
+### 运行这些能力测试
+
+```bash
+# 常规 JDK 或 JBR 都直接传入
+JAVA=/path/to/jdk/bin/java ./test/capability.sh
+```
+
+每个 case 单独启动 JVM，失败的结构变更不会污染下一个 case。
 
 ### Build 窗口报 `cannot start mvn`？
 
@@ -316,7 +334,10 @@ JAVA=/path/to/jbr/bin/java ./test/structure.sh
 # 延迟解析错误回滚 + 按 Configuration 定向刷新（issue #1 回归）
 ./test/reloader-regression.sh
 
-# 对每个已安装 JDK 分别跑上面两个脚本
+# 按操作类型逐个测试；常规 JDK 或 JBR 都可用
+JAVA=/path/to/jdk/bin/java ./test/capability.sh
+
+# 对每个已安装 JDK 分别跑 e2e/structure
 ./test/jdk-matrix.sh
 ```
 
@@ -333,7 +354,7 @@ JDK_MATRIX_HOMES="$JAVA8:$JAVA11:$JBR17:$JBR21:$JBR25:$JAVA21:$JAVA25" \
   ./test/jdk-matrix.sh
 ```
 
-`test/jdk-matrix.sh` 每次运行都会重新生成下表：
+`test/jdk-matrix.sh` 每次运行都会重新生成下面的“脚本覆盖矩阵”；按操作类型的真实能力以“能力边界”的两张表为准：
 
 <!-- BEGIN JDK-MATRIX -->
 <!-- generated by test/jdk-matrix.sh; do not edit by hand -->

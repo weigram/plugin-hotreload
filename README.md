@@ -204,7 +204,47 @@ JBR differences observed:
 
 - JBR 17: add/remove methods and fields, add annotations, add interfaces; removing/replacing interfaces fails; replacing a superclass fails.
 - JBR 21 and 25: removing and replacing interfaces also pass; replacing a superclass still fails.
-- JDK 8 / 11 / 21 / 25: method body and Mapper XML pass; structural changes are not tested because those JDKs reject the JBR flag.
+- JDK 8 / 11 / 21 / 25: method body, Mapper XML, and add/remove class annotations pass; other structural changes fail. The generated matrix above marks some of these as "not tested" because `jdk-matrix.sh` does not run the full structural probe on standard JDKs; the per-operation tables below are the authoritative results.
+
+### Per-operation capability
+
+Each case starts a fresh JVM. Method body and Mapper XML do not use `-XX`; structural JBR cases use `-XX:+AllowEnhancedClassRedefinition`.
+
+#### Standard JDK
+
+| Operation | JDK 8 | JDK 11 | JDK 21 | JDK 25 |
+| --- | --- | --- | --- | --- |
+| Method body | ✅ | ✅ | ✅ | ✅ |
+| Mapper XML | ✅ | ✅ | ✅ | ✅ |
+| Add method | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Remove method | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Add field | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Remove field | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+| Add class annotation | ✅ | ✅ | ✅ | ✅ |
+| Remove class annotation | ✅ | ✅ | ✅ | ✅ |
+| Add interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Remove interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Replace interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Change method signature | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
+
+#### JBR
+
+| Operation | JBR 17 | JBR 21 | JBR 25 |
+| --- | --- | --- | --- |
+| Method body | ✅ | ✅ | ✅ |
+| Mapper XML | ✅ | ✅ | ✅ |
+| Add method | ✅ | ✅ | ✅ |
+| Remove method | ✅ | ✅ | ✅ |
+| Add field | ✅ | ✅ | ✅ |
+| Remove field | ✅ | ✅ | ✅ |
+| Add class annotation | ✅ | ✅ | ✅ |
+| Remove class annotation | ✅ | ✅ | ✅ |
+| Add interface | ✅ | ✅ | ✅ |
+| Remove interface | ❌ hierarchy change | ✅ | ✅ |
+| Replace interface | ❌ hierarchy change | ✅ | ✅ |
+| Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Change method signature | ✅ | ✅ | ✅ |
 
 Test commands:
 
@@ -216,10 +256,13 @@ JAVA=/path/to/jbr/bin/java ./test/structure.sh
 # deferred XML error rollback + per-Configuration targeting
 ./test/reloader-regression.sh
 
+# per-operation probe; use any JDK or JBR
+JAVA=/path/to/jdk/bin/java ./test/capability.sh
+
 JBR_MATRIX_DIR=/path/to/jbr ./test/jdk-matrix.sh
 ```
 
-`test/e2e.sh` covers Mapper XML and method-body redefinition. `test/structure.sh` runs the structural matrix in isolated JVMs. `test/reloader-regression.sh` covers issue #1: deferred-error rollback and per-Configuration targeting. `test/jdk-matrix.sh` runs both against every JDK and rewrites this table in `README.md` and `README.zh-CN.md`.
+`test/e2e.sh` covers Mapper XML and method-body redefinition. `test/structure.sh` runs the structural matrix in isolated JVMs. `test/reloader-regression.sh` covers issue #1: deferred-error rollback and per-Configuration targeting. `test/capability.sh` probes each operation in a fresh JVM. `test/jdk-matrix.sh` runs both against every JDK and rewrites the generated table in `README.md` and `README.zh-CN.md`.
 
 ### Direct OpenIDEA test
 
