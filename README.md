@@ -55,22 +55,40 @@ The HotSwapAgent jar is not started as a second agent. `agent/package.py` unpack
 - **Configuration.** The plugin passes `autoHotswap=true`, `disablePlugin=MyBatis`, `disablePlugin=MyBatisPlus`, `disablePlugin=WatchResources`, and `LOGGER=info`. It does not use `-XX:HotswapAgent=external`.
 - **License.** HA 2.0.5 is GPL-2.0 and is kept unmodified inside the merged jar; the plugin's own code and the HA jar are both distributed under GPL-2.0.
 
-#### Why HA's MyBatis / MyBatis-Plus plugins cannot be enabled with this plugin
+### MyBatis integration
 
-The plugin keeps exactly one owner for mapper XML: its own `MyBatisXmlReloader`. This is not just a preference: HA's MyBatis plugins instrument the same MyBatis classes that this plugin uses, so the two integrations cannot coexist.
+#### Why HA's MyBatis plugin cannot provide namespace-level rollback or this plugin's MyBatis-Plus proxy compatibility
 
-- **Same instrumentation points.** HA's MyBatis plugin patches `XMLConfigBuilder`, `XMLMapperBuilder`, `Configuration`, `MapperRegistry`, and `SqlSessionFactoryBean`, and uses `ConfigurationProxy` / `SpringMybatisConfigurationProxy`. HA's MyBatis-Plus plugin patches `MybatisConfiguration`, `MybatisXMLMapperBuilder`, `MybatisSqlSessionFactoryBean`, and `TableInfoHelper`, and uses `ConfigurationPlusProxy`.
-- **Two transformers, two owners.** This plugin's `MyBatisConfigTransformer` injects a registration call into `Configuration.addMappedStatement` with ASM and keeps the live `Configuration` in `MyBatisConfigRegistry`. If HA also transforms the same classes — or replaces `Configuration` with its proxy — the registry can point at the original object while the application uses the proxy.
+HA's MyBatis plugin is built around `ConfigurationProxy` / `SpringMybatisConfigurationProxy`. It patches `XMLConfigBuilder`, `XMLMapperBuilder`, `Configuration`, `MapperRegistry`, and `SqlSessionFactoryBean`, then refreshes a *configuration*, not a namespace. It has no per-namespace snapshot or transaction: if a parse leaves deferred statements/result maps behind, there is no API to restore the previous namespace and its pending parser state. That is exactly the rollback guarantee this plugin needs.
 
-- **Duplicate parsing.** Both paths watch mapper XML and call MyBatis parsing/building code. A namespace is then registered twice, which can produce `Mapped Statements collection already contains value for ...`, duplicate `resultMap`/`sqlFragment` entries, or a half-updated namespace.
-- **No shared rollback.** This plugin clears a namespace and reparses it with `XMLMapperBuilder`; on failure it restores the previous statements. HA's MyBatis plugin has its own reload model and does not know about this registry/rollback, so a failed parse in one path can leave the other path inconsistent.
-- **Proxy and registry conflicts.** MyBatis-Plus uses `MybatisConfiguration` and `MybatisMapperRegistry`; HA's MyBatis/MyBatis-Plus plugins also instrument MyBatis configuration and mapper registration. Layering both on top of existing mapper proxies, PageHelper or Flowable interceptors can duplicate registration or wrap the proxy chain twice.
-- **No proxy layer from this plugin.** This plugin deliberately does not create mapper proxies. It only injects one registration call into `Configuration.addMappedStatement` with ASM, so disabling HA's MyBatis plugins keeps the original MyBatis / MyBatis-Plus proxy chain intact.
-- **`WatchResources`.** HA's resource watcher would trigger additional reloads for the same mapper files. It is disabled for the same single-owner reason; the plugin's own XML watcher handles `target/classes/mapper/*.xml`.
+HA also ships a separate MyBatis-Plus plugin, but it uses `ConfigurationPlusProxy` and patches `MybatisConfiguration`, `MybatisXMLMapperBuilder`, `MybatisSqlSessionFactoryBean`, and `TableInfoHelper`. That adds another proxy/registration layer; it is not the no-proxy behavior this plugin guarantees. The HA plugin may be usable on its own, but it cannot preserve both this plugin's registry and the application's existing MyBatis-Plus / PageHelper / Flowable proxy chain.
 
-The HA class-redefinition and Spring plugins remain enabled. Mapper interface class changes are still handled by the normal class-redefinition path, while mapper XML is owned by the custom reloader.
+#### How this plugin handles MyBatis
 
-If this plugin's XML reloader and registry were removed, HA's MyBatis plugin could be used on its own — but that is a different integration and loses the namespace-level rollback and MyBatis-Plus proxy handling described above. They cannot be enabled together with this plugin.
+1. **Discover the real Configuration.** `MyBatisConfigTransformer` uses ASM to inject one call at the top of `addMappedStatement` in both `org.apache.ibatis.session.Configuration` and MyBatis-Plus's `MybatisConfiguration`. The call registers `this` in `MyBatisConfigRegistry`, a list of weak references. The transformer does not touch `MapperRegistry`, `MapperProxyFactory`, mapper interfaces, or interceptors.
+2. **Find the owner of the changed XML.** `MyBatisXmlReloader` reads the namespace, then looks at the `loadedResources` of each live configuration and its own recorded resource ownership. It reloads only the configuration(s) that actually loaded that resource; a same-namespace configuration with a different file is left alone.
+3. **Reload one namespace as a transaction.** For each target it snapshots the namespace entries in `mappedStatements`, `resultMaps`, `parameterMaps`, `keyGenerators`, `sqlFragments`, and the namespace cache, removes the old entries and the loaded resource, then reparses with `XMLMapperBuilder`.
+4. **Validate deferred work before committing.** It calls MyBatis's pending parsers and checks `incompleteStatements` / `incompleteResultMaps` / `incompleteCacheRefs` for the namespace. If anything is unresolved, the parsed result is rejected.
+5. **Rollback or accept.** On failure it restores the snapshotted maps and cache, drops the failed namespace's pending parser entries, and unloads the resource, so the old statement keeps working and a corrected file can be retried. On success it keeps the new entries and records the resource owner.
+6. **Keep the proxy chain intact.** The plugin never creates a mapper proxy and never wraps `Configuration`; MyBatis-Plus, PageHelper, and Flowable keep the proxy/interceptor chain they built.
+
+#### What happens if both are enabled
+
+- **Two transformers on the same classes.** HA's Javassist transformers add proxy/refresh hooks to `Configuration`, `XMLMapperBuilder`, `MapperRegistry`, and related classes while this plugin's ASM transformer injects `addMappedStatement` registration. The resulting bytecode and initialization order are no longer deterministic.
+- **Two owners for one namespace.** Both paths parse the same mapper XML and add statements. A typical failure is `Mapped Statements collection already contains value for ...`, duplicate `resultMap`/`sqlFragment`, or a half-updated namespace.
+- **The registry points at the wrong object.** HA's `ConfigurationProxy` can replace the `Configuration` used by the application; `MyBatisConfigRegistry` and the reloader still hold the original object. A reload can report success while the application queries the proxy, or vice versa.
+- **Proxy chains get wrapped twice.** HA's MyBatis-Plus `ConfigurationPlusProxy` / `SpringMybatisConfigurationProxy` is layered on MyBatis-Plus's `MybatisConfiguration` and the existing mapper proxies. PageHelper or Flowable interceptors can end up duplicated, bypassed, or attached to the wrong configuration.
+- **Rollback is no longer coordinated.** If HA's parser fails after this plugin has started, or this plugin rolls back while HA keeps its new state, the two paths disagree. The failed namespace can be left in the half-broken state issue #1 describes.
+
+For these reasons the agent starts HA with:
+
+```text
+disablePlugin=MyBatis
+disablePlugin=MyBatisPlus
+disablePlugin=WatchResources
+```
+
+HA class redefinition and the Spring plugin remain enabled. If the custom XML reloader and registry were removed, HA's MyBatis plugin could be used on its own — that is a different integration, not a configuration toggle for this one.
 
 ```text
 save file
