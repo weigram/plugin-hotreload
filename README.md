@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Java and MyBatis XML hot reload for OpenIDEA. Save a Java file or a MyBatis mapper XML and the plugin builds the module and reloads classes or mapper statements in the running JVM — no application restart.
+Java and MyBatis XML hot reload for OpenIDEA. Save a Java file or a MyBatis mapper XML and the plugin builds the module and reloads classes or mapper statements in the running JVM — no application restart. The implementation approach references the [HotSwapHelper](https://github.com/gejun123456/HotSwapHelper) project.
 
 The class-redefinition and Spring engine is [HotSwapAgent 2.0.5](https://github.com/HotswapProjects/HotswapAgent). This project adds the OpenIDEA integration: `javaAgents` injection, MyBatis XML reload, JDK module opening, safe Spring XML handling, and the IDE build loop.
 

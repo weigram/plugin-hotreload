@@ -6,7 +6,8 @@
 改完 Java 或 MyBatis Mapper XML 保存，**自动编译 + 原地热更新**，应用不用重启。
 插件把 agent 通过 OpenIDEA 的 `[[contributes.javaAgents]]` 注入 IDE 自带的
 Application / Spring Boot / JAR Application 运行配置，Run 和 Debug 都生效，不需要改
-VM options，也不需要在项目里加任何依赖。
+VM options，也不需要在项目里加任何依赖。实现思路参考了
+[HotSwapHelper](https://github.com/gejun123456/HotSwapHelper) 项目。
 
 插件 ID：`weigram.hotreload`（社区市场 publisher `weigram`）。
 
