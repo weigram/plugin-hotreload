@@ -42,9 +42,12 @@ The HotSwapAgent jar is not started as a second agent. `agent/package.py` unpack
 - **Configuration.** The plugin passes `autoHotswap=true`, `disablePlugin=MyBatis`, `disablePlugin=MyBatisPlus`, `disablePlugin=WatchResources`, and `LOGGER=info`. It does not use `-XX:HotswapAgent=external`.
 - **License.** HA 2.0.5 is GPL-2.0 and is kept unmodified inside the merged jar; the plugin's own code and the HA jar are both distributed under GPL-2.0.
 
-#### Why HA's MyBatis / MyBatis-Plus plugins are disabled
+#### Why HA's MyBatis / MyBatis-Plus plugins cannot be enabled with this plugin
 
-The plugin keeps exactly one owner for mapper XML: its own `MyBatisXmlReloader`. Enabling HA's MyBatis plugins as well would create two independent reload paths for the same files.
+The plugin keeps exactly one owner for mapper XML: its own `MyBatisXmlReloader`. This is not just a preference: HA's MyBatis plugins instrument the same MyBatis classes that this plugin uses, so the two integrations cannot coexist.
+
+- **Same instrumentation points.** HA's MyBatis plugin patches `XMLConfigBuilder`, `XMLMapperBuilder`, `Configuration`, `MapperRegistry`, and `SqlSessionFactoryBean`, and uses `ConfigurationProxy` / `SpringMybatisConfigurationProxy`. HA's MyBatis-Plus plugin patches `MybatisConfiguration`, `MybatisXMLMapperBuilder`, `MybatisSqlSessionFactoryBean`, and `TableInfoHelper`, and uses `ConfigurationPlusProxy`.
+- **Two transformers, two owners.** This plugin's `MyBatisConfigTransformer` injects a registration call into `Configuration.addMappedStatement` with ASM and keeps the live `Configuration` in `MyBatisConfigRegistry`. If HA also transforms the same classes — or replaces `Configuration` with its proxy — the registry can point at the original object while the application uses the proxy.
 
 - **Duplicate parsing.** Both paths watch mapper XML and call MyBatis parsing/building code. A namespace is then registered twice, which can produce `Mapped Statements collection already contains value for ...`, duplicate `resultMap`/`sqlFragment` entries, or a half-updated namespace.
 - **No shared rollback.** This plugin clears a namespace and reparses it with `XMLMapperBuilder`; on failure it restores the previous statements. HA's MyBatis plugin has its own reload model and does not know about this registry/rollback, so a failed parse in one path can leave the other path inconsistent.
@@ -53,6 +56,8 @@ The plugin keeps exactly one owner for mapper XML: its own `MyBatisXmlReloader`.
 - **`WatchResources`.** HA's resource watcher would trigger additional reloads for the same mapper files. It is disabled for the same single-owner reason; the plugin's own XML watcher handles `target/classes/mapper/*.xml`.
 
 The HA class-redefinition and Spring plugins remain enabled. Mapper interface class changes are still handled by the normal class-redefinition path, while mapper XML is owned by the custom reloader.
+
+If this plugin's XML reloader and registry were removed, HA's MyBatis plugin could be used on its own — but that is a different integration and loses the namespace-level rollback and MyBatis-Plus proxy handling described above. They cannot be enabled together with this plugin.
 
 ```text
 save file

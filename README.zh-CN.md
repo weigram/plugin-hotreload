@@ -82,10 +82,12 @@ HA 不是一个额外的进程，也不是让用户再加一个 `-javaagent`。`
   不使用 `-XX:HotswapAgent=external`。
 - **许可**：HA 2.0.5 为 GPL-2.0，在合并 jar 中保持未修改；插件自身也是 GPL-2.0-only。
 
-#### 为什么禁用 HA 的 MyBatis / MyBatis-Plus 插件
+#### 为什么不能启用 HA 的 MyBatis / MyBatis-Plus 插件
 
-插件让 Mapper XML 只有一个 owner：自己的 `MyBatisXmlReloader`。如果 HA 的 MyBatis 插件也开着，同一个 XML 会有两条独立的刷新路径。
+插件让 Mapper XML 只有一个 owner：自己的 `MyBatisXmlReloader`。这不是"想不想开"的问题：HA 的 MyBatis 插件和本插件会改同一批 MyBatis 类，两套集成不能共存。
 
+- **改同一批类**：HA 的 MyBatis 插件会 patch `XMLConfigBuilder`、`XMLMapperBuilder`、`Configuration`、`MapperRegistry`、`SqlSessionFactoryBean`，并使用 `ConfigurationProxy` / `SpringMybatisConfigurationProxy`；MyBatis-Plus 插件会 patch `MybatisConfiguration`、`MybatisXMLMapperBuilder`、`MybatisSqlSessionFactoryBean`、`TableInfoHelper`，并使用 `ConfigurationPlusProxy`。
+- **两个 transformer、两个 owner**：本插件的 `MyBatisConfigTransformer` 用 ASM 往 `Configuration.addMappedStatement` 注入注册调用，`MyBatisConfigRegistry` 持有活着的 `Configuration`。HA 再改同一批类，或者用它的 proxy 替换 `Configuration` 后，registry 里的对象和应用实际使用的对象就可能不是同一个。
 - **重复解析**：两条路径都会监听 mapper XML 并调用 MyBatis 的解析/构建逻辑，同一个 namespace 被注册两次，容易出现 `Mapped Statements collection already contains value for ...`、重复的 `resultMap` / `sqlFragment`，或者 namespace 只更新了一半。
 - **没有共享回滚**：本插件按 namespace 清旧条目，再用 `XMLMapperBuilder` 重解析；失败时恢复旧语句。HA 的 MyBatis 插件有自己的刷新模型，不知道这个注册表和回滚状态，一边失败可能让另一边留下不一致的数据。
 - **代理/注册冲突**：MyBatis-Plus 使用 `MybatisConfiguration`、`MybatisMapperRegistry`；HA 的 MyBatis/MyBatis-Plus 插件也会介入 MyBatis 配置和 Mapper 注册。两者叠加在已有的 Mapper 代理、PageHelper / Flowable 拦截器上，可能重复注册或重复包装代理链。
@@ -93,6 +95,8 @@ HA 不是一个额外的进程，也不是让用户再加一个 `-javaagent`。`
 - **`WatchResources`**：HA 的资源监听器会对同一批 mapper 文件再触发刷新。出于同样的单一 owner 原因禁用它；XML 由插件自己的 watcher 处理 `target/classes/mapper/*.xml`。
 
 HA 的类重定义和 Spring 插件仍然启用。Mapper 接口的类变化仍走普通类重定义，Mapper XML 仍由自研 reloader 负责。
+
+如果去掉本插件的 XML reloader 和 registry，HA 的 MyBatis 插件可以单独使用；但那是另一套集成，会失去上面说的 namespace 级回滚和 MyBatis-Plus 代理兼容。二者不能和本插件同时启用。
 
 ```text
 保存文件
