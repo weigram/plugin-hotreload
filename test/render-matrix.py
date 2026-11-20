@@ -94,7 +94,7 @@ def main() -> int:
             elif status == "FAIL":
                 cell = "❌ " + short_reason(reason)
             else:
-                cell = "❌ 需要 JBR 增强重定义" if not label.startswith("JBR") else "❌ 未测试"
+                cell = "❌ 未测试（需 JBR）" if not label.startswith("JBR") else "❌ 未测试"
             row.append(cell)
         lines.append("| " + " | ".join(row) + " |")
     lines.append(END)
