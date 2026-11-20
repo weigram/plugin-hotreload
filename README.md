@@ -19,6 +19,19 @@ Plugin ID: `weigram.hotreload`
 - **No `--add-opens`** for the application: the agent opens the JDK packages it needs at runtime.
 - **Fallback redefiner** when HotSwapAgent cannot start: method bodies and XML still work, but Spring reprocessing is unavailable.
 
+### What this adds beyond OpenIDEA's built-in HotSwap
+
+OpenIDEA's built-in HotSwap is useful for quick method-body edits, but in a standard JDK debug session it does not cover:
+
+- **Mapper XML / MyBatis state.** It does not reload mapper XML, clear a namespace, refresh `MappedStatement`s, or roll back a failed mapper parse.
+- **Spring context reprocessing.** It does not reprocess Spring bean definitions, controllers, or AOP metadata after a class change.
+- **Structural changes.** With a standard JDK it only replaces method bodies; it does not add/remove methods or fields, add annotations/interfaces, or handle JBR-enhanced changes.
+- **Build loop for mapper saves.** It does not connect saving a mapper XML to a module build, a resource copy into `target/classes`, and an XML refresh.
+- **MyBatis-Plus / proxy safety.** It does not coordinate with `MybatisConfiguration`, `MybatisMapperRegistry`, PageHelper, or Flowable proxy chains.
+- **JBR diagnostics.** It does not check whether the selected JDK is JBR, whether the enhanced-redefinition flag is present, or explain why a structural change failed.
+
+This plugin fills those gaps while leaving the IDE debugger usable. Built-in HotSwap behavior varies by OpenIDEA and JDK version; the list above is the set of gaps this integration is designed to cover.
+
 Structural changes have JVM limits. The tested matrix is in [Test Status](#4-test-status); replacing a superclass is not supported by JBR 17/21/25, and replacing/removing interfaces works on JBR 21/25 but not JBR 17.
 
 ## 2. How It Works

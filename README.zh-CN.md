@@ -1,3 +1,7 @@
+---
+domd-id: 53407ed5-e8e0-47f3-ab2d-d206a362d970
+---
+
 [English](README.md) | 简体中文
 
 
@@ -28,6 +32,19 @@ HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=
 - **无额外 agent**：不需要外部 `hotswap-agent-2.0.5.jar`，不需要 `-XX:HotswapAgent=external`，也不需要 `--add-opens`。
 - **IDE 集成**：`javaAgents` 自动覆盖 Application / Spring Boot / JAR Application；保留 Run/Debug 右键；自动编译带防抖，构建后焦点回到编辑器。
 - **诊断与兜底**：内置授权/项目 JDK/输出目录诊断、复制增强 VM 参数；HA 启动失败时回退自研 `ClassRedefiner`，方法体和 XML 仍可用。
+
+### 相比 OpenIDEA 自带热更新的补充
+
+OpenIDEA 自带 HotSwap 适合 Debug 下快速改方法体，但在标准 JDK 下它不覆盖：
+
+- **Mapper XML / MyBatis 状态**：不会刷新 mapper XML、清 namespace、更新 `MappedStatement`，也没有解析失败回滚。
+- **Spring 上下文 reprocess**：不会在类变化后 reprocess Spring bean、controller、AOP 元数据。
+- **结构变更**：标准 JDK 只能替换方法体；不会增删方法/字段、增加注解/接口，也没有 JBR 增强重定义的配合。
+- **Mapper 保存后的构建链路**：不会在保存 mapper XML 后触发模块构建、复制资源到 `target/classes` 并刷新 XML。
+- **MyBatis-Plus / 代理安全**：不会协调 `MybatisConfiguration`、`MybatisMapperRegistry`、PageHelper、Flowable 的代理链。
+- **JBR 诊断**：不会检查当前 JDK 是不是 JBR、增强参数有没有加，也不会解释结构变更为什么失败。
+
+插件补齐这些缺口，同时保留 IDE 自带调试器。不同 OpenIDEA / JDK 版本的自带 HotSwap 行为可能不同，上面列的是本插件专门覆盖的缺口。
 
 ## 组成
 
