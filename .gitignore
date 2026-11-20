@@ -16,3 +16,6 @@
 /test/fixture-structure/.openidea/
 
 __pycache__/
+
+# agent/plugin marker for unsupported class changes
+.hotreload-unsupported

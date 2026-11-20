@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 JAVA="${JAVA:-java}"
 JAVAC="${JAVAC:-javac}"
 ASM_JAR="agent/lib/asm-9.8.jar"
+HOTSWAP_AGENT_JAR="agent/lib/hotswap-agent-2.0.5.jar"
 AGENT_CLASSES="build/reloader-regression-classes"
 MYBATIS_JAR="${MYBATIS_JAR:-$HOME/.m2/repository/org/mybatis/mybatis/3.5.19/mybatis-3.5.19.jar}"
 
@@ -13,10 +14,10 @@ mkdir -p "$AGENT_CLASSES"
 find agent/src -name '*.java' | sort > build/reloader-regression-sources.txt
 JAVAC_MAJOR="$("$JAVAC" -version 2>&1 | sed -n 's/^javac \([0-9][0-9]*\).*/\1/p')"
 if [ "${JAVAC_MAJOR:-0}" -ge 9 ]; then
-  "$JAVAC" --release 8 -Xlint:all,-options -cp "$ASM_JAR" \
+  "$JAVAC" --release 8 -Xlint:all,-options -cp "$ASM_JAR:$HOTSWAP_AGENT_JAR" \
     -d "$AGENT_CLASSES" @build/reloader-regression-sources.txt
 else
-  "$JAVAC" -source 8 -target 8 -Xlint:-options -cp "$ASM_JAR" \
+  "$JAVAC" -source 8 -target 8 -Xlint:-options -cp "$ASM_JAR:$HOTSWAP_AGENT_JAR" \
     -d "$AGENT_CLASSES" @build/reloader-regression-sources.txt
 fi
 

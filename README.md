@@ -8,16 +8,59 @@ The class-redefinition and Spring engine is [HotSwapAgent 2.0.5](https://github.
 
 Plugin ID: `weigram.hotreload`
 
+## Recommended JDK: JBR or DCEVM
+
+A standard JDK is enough for method bodies, Mapper XML, and adding/removing class annotations. Use **JetBrains Runtime (JBR)** or **DCEVM** when you need structural changes: add/remove methods or fields, add interfaces, or change method signatures.
+
+| Change | Standard JDK | JBR / DCEVM |
+| --- | --- | --- |
+| Method body | ✅ | ✅ |
+| Mapper XML | ✅ | ✅ |
+| Add/remove class annotation | ✅ | ✅ |
+| Add/remove method or field | ❌ | ✅ |
+| Add interface | ❌ | ✅ |
+| Remove/replace interface | ❌ | JBR 21/25 only |
+| Replace superclass | ❌ | ❌ (restart required) |
+| Change method signature | ❌ | ✅ |
+
+### Download
+
+- **JBR** — [JetBrains Runtime releases](https://github.com/JetBrains/JetBrainsRuntime/releases) or [JetBrains JBR page](https://www.jetbrains.com/intellij/jbr/). JBR 17, 21, and 25 were tested here.
+- **DCEVM** — [DCEVM 11 builds](https://github.com/TravaOpenJDK/trava-jdk-11-dcevm/releases), [DCEVM 8 builds](https://github.com/TravaOpenJDK/trava-jdk-8-dcevm/releases), or [dcevm.github.io](https://dcevm.github.io/). DCEVM 8u282 and 11.0.15 were tested here.
+
+### Select the JDK in OpenIDEA
+
+The exact menu label varies slightly by OpenIDEA version:
+
+1. **Project SDK:** `File › Project Structure › Project › SDK` (or `OpenIDEA › Settings › Project Structure`) and select the JBR/DCEVM home.
+2. **Run configuration:** `Run › Edit Configurations`, select the same JDK in **JRE**, or set the `jre` / `command` field in the project's `.openidea/run.toml`.
+3. **VM options:** add `-XX:+AllowEnhancedClassRedefinition` to the run configuration. It is accepted by JBR and DCEVM; a standard JDK rejects it.
+4. If the project uses Maven, also select the same JDK under `Settings › Build, Execution, Deployment › Build Tools › Maven › Runner`.
+
+### Unsupported-change warning
+
+When the JVM refuses a structural change, the agent prints an English red warning in the application console:
+
+```text
+[hotreload] ERROR  Unsupported class change was not applied: <class and reason>
+[hotreload] ERROR  Restart the application. For supported structural changes use JBR or DCEVM with -XX:+AllowEnhancedClassRedefinition.
+```
+
+The agent also writes `.hotreload-unsupported` in the application working directory. The IDE plugin can show an error popup for that marker. The popup is controlled by **Settings › Plugins › Hot Reload → Unsupported-change popup**; uncheck it to never show the popup again. The red console warning remains.
+
+The marker contains only a timestamp, class name, and failure reason — no local file paths. It is safe to delete and should not be committed.
+
 ## 1. Features
 
 - **Method-body hot reload** on JDK 8–25, in both **Run** and **Debug** configurations.
 - **MyBatis / MyBatis-Plus mapper XML reload** through a custom namespace reloader. The HA MyBatis plugins are disabled so mapper XML is not parsed twice.
 - **Spring bean / controller / AOP reprocessing** through HotSwapAgent's Spring plugin.
-- **Add/remove methods and fields, add class annotations, add interfaces** on JetBrains Runtime with `-XX:+AllowEnhancedClassRedefinition`.
+- **Add/remove methods and fields, add class annotations, add interfaces** on JetBrains Runtime or DCEVM with `-XX:+AllowEnhancedClassRedefinition`.
 - **Automatic build on save**, with debounce and an option to return focus to the editor after the Build window opens.
 - **No external HotSwapAgent jar** and no `-XX:HotswapAgent=external`.
 - **No `--add-opens`** for the application: the agent opens the JDK packages it needs at runtime.
 - **Fallback redefiner** when HotSwapAgent cannot start: method bodies and XML still work, but Spring reprocessing is unavailable.
+- **Unsupported-change diagnostics**: an English red console warning, plus an optional IDE popup that can be turned off in Settings.
 
 ### What this adds beyond OpenIDEA's built-in HotSwap
 
@@ -143,6 +186,7 @@ There is no network capability and no telemetry.
 | Auto-compile debounce (ms)      | `1200`                   | Coalesces consecutive saves into one build.                                                                  |
 | Refocus editor after auto build | on                       | The Build window still opens, but focus returns to the editor.                                               |
 | Notifications                   | on                       | Errors and missing grants. Normal reload logs stay in the application Run console.                           |
+| Unsupported-change popup        | on                       | Show an IDE popup when the agent detects a JVM-rejected structural change. Uncheck to never show it again.    |
 
 ### Structural changes
 

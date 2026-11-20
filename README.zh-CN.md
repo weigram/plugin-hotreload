@@ -16,8 +16,50 @@ Mapper XML 由本插件的自研 reloader 负责（HA 的 MyBatis/MyBatis-Plus �
 HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=external`；JDK 模块 opens
 由 agent 运行时调用 `Instrumentation.redefineModule` 完成，**不需要 `--add-opens`**。
 方法体和 XML 在 JDK 8–25 上不需要任何 `-XX`；「增删方法/字段、增加接口、类注解」需要 JBR 的
-`-XX:+AllowEnhancedClassRedefinition`（JBR 17 实测通过）。**删除接口、替换接口、替换父类仍会报
-`attempted to change superclass or interfaces`**，需要重启。
+`-XX:+AllowEnhancedClassRedefinition`（JBR 17 实测通过）。**删除/替换接口在 JBR 17 上仍会报
+`attempted to change superclass or interfaces`；JBR 21/25 已支持；替换父类仍需要重启。**
+
+## 推荐 JDK：JBR 或 DCEVM
+
+方法体、Mapper XML、类注解增删用标准 JDK 就够。需要结构热更时，推荐使用 **JetBrains Runtime（JBR）** 或 **DCEVM**：增删方法/字段、增加接口、修改方法签名。
+
+| 修改         | 标准 JDK | JBR / DCEVM |
+| ---------- | ------ | ----------- |
+| 方法体        | ✅      | ✅           |
+| Mapper XML | ✅      | ✅           |
+| 增加/删除类注解   | ✅      | ✅           |
+| 增加/删除方法/字段 | ❌      | ✅           |
+| 增加接口       | ❌      | ✅           |
+| 删除/替换接口    | ❌      | 仅 JBR 21/25 |
+| 替换父类       | ❌      | ❌（需重启）      |
+| 修改方法签名     | ❌      | ✅           |
+
+### 下载
+
+- **JBR**：[JetBrains Runtime releases](https://github.com/JetBrains/JetBrainsRuntime/releases) 或 [JetBrains JBR 页面](https://www.jetbrains.com/intellij/jbr/)。本次测试了 JBR 17 / 21 / 25。
+- **DCEVM**：[DCEVM 11 构建](https://github.com/TravaOpenJDK/trava-jdk-11-dcevm/releases)、[DCEVM 8 构建](https://github.com/TravaOpenJDK/trava-jdk-8-dcevm/releases) 或 [dcevm.github.io](https://dcevm.github.io/)。本次测试了 DCEVM 8u282 / 11.0.15。
+
+### 在 OpenIDEA 中更换 JDK
+
+不同 OpenIDEA 版本的菜单文字可能略有差异：
+
+1. **项目 SDK**：`File › Project Structure › Project › SDK`（或 `OpenIDEA › Settings › Project Structure`），选择 JBR/DCEVM 的 Home。
+2. **运行配置**：`Run › Edit Configurations`，在 **JRE** 里选择同一个 JDK；也可以直接改项目 `.openidea/run.toml` 里的 `jre` / `command`。
+3. **VM options**：在运行配置里加 `-XX:+AllowEnhancedClassRedefinition`。JBR 和 DCEVM 支持；标准 JDK 会直接报错。
+4. 如果项目用 Maven，在 `Settings › Build, Execution, Deployment › Build Tools › Maven › Runner` 里也选同一个 JDK。
+
+### 不支持热更时的提示
+
+JVM 拒绝结构变更时，agent 会在应用控制台打印英文红色提示：
+
+```text
+[hotreload] ERROR  Unsupported class change was not applied: <class and reason>
+[hotreload] ERROR  Restart the application. For supported structural changes use JBR or DCEVM with -XX:+AllowEnhancedClassRedefinition.
+```
+
+agent 同时会在应用工作目录写入 `.hotreload-unsupported`；IDE 插件检测到该文件后可以弹出错误提示。弹窗由 **Settings › Plugins › Hot Reload → Unsupported-change popup** 控制；取消勾选后不再弹窗，控制台的红色提示仍保留。
+
+marker 只包含时间戳、类名和失败原因，不包含本地文件路径；可以安全删除，也不要提交到仓库。
 
 ## 特性
 
@@ -25,10 +67,11 @@ HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=
 - **JDK 8–25**：方法体和 Mapper XML 在 JDK 8 / 11 / 17 / 21 / 25 上可用，不需要额外 VM 参数。
 - **Spring 支持**：HotSwapAgent 2.0.5 负责类重定义和 Spring bean / controller / AOP 的 reprocess。
 - **MyBatis / MyBatis-Plus**：自研 XML reloader 按 namespace 清旧语句、重新解析，失败回滚；不修改 Mapper 代理链，只给 `Configuration.addMappedStatement` 注入注册调用，兼容现有 MyBatis-Plus、PageHelper、Flowable 代理。
-- **结构热更**：JBR + `-XX:+AllowEnhancedClassRedefinition` 下支持增删方法/字段、增加类注解、增加接口；JBR 21/25 还支持删除/替换接口。替换父类仍不支持，需要重启。
+- **结构热更**：JBR / DCEVM + `-XX:+AllowEnhancedClassRedefinition` 下支持增删方法/字段、增加类注解、增加接口；JBR 21/25 还支持删除/替换接口。替换父类仍不支持，需要重启。
 - **无额外 agent**：不需要外部 `hotswap-agent-2.0.5.jar`，不需要 `-XX:HotswapAgent=external`，也不需要 `--add-opens`。
 - **IDE 集成**：`javaAgents` 自动覆盖 Application / Spring Boot / JAR Application；保留 Run/Debug 右键；自动编译带防抖，构建后焦点回到编辑器。
 - **诊断与兜底**：内置授权/项目 JDK/输出目录诊断、复制增强 VM 参数；HA 启动失败时回退自研 `ClassRedefiner`，方法体和 XML 仍可用。
+- **不支持热更提示**：控制台英文红色提示；可选 IDE 弹窗，可在 Settings 中关闭。
 
 ### 相比 OpenIDEA 自带热更新的补充
 
@@ -184,7 +227,7 @@ Python 3。
 应用控制台里应看到：
 
 ```text
-15:00:05.744 [hotreload] INFO  Hot Reload agent 1.1.1 (pid 65453, OpenJDK 64-Bit Server VM 17.0.14+1-b1367.22)
+15:00:05.744 [hotreload] INFO  Hot Reload agent 1.2.0 (pid 65453, OpenJDK 64-Bit Server VM 17.0.14+1-b1367.22)
 15:00:05.900 [hotreload] INFO  class/Spring engine: HotSwapAgent 2.0.5 (autoHotswap, Spring plugin on, MyBatis plugins off)
 15:00:05.950 [hotreload] INFO  watching 1 class directories: …/target/classes
 15:00:08.137 HOTSWAP AGENT: … RELOAD … Reloading classes [com.qctc.lab.service.DemoService] (autoHotswap)
@@ -225,6 +268,7 @@ Run / Debug 不自己起 `mvn`，而是调用 IDE 的 `run.runContext` / `run.de
 | 自动编译防抖（毫秒）  | 1200                     | 连续保存合并成一次构建                                                                 |
 | 自动编译后回到编辑器  | 开                        | 触发 IDE 构建后把焦点从 Build 窗口还给编辑器；Build 窗口仍会打开                                   |
 | 显示通知        | 开                        | 只在错误/缺授权时提示；正常热更日志在 Run 控制台                                                 |
+| 不支持热更时弹窗    | 开                        | agent 检测到 JVM 拒绝的结构修改时弹 IDE 提示；取消勾选后不再弹窗，控制台红色提示保留                          |
 
 ## Capabilities and security
 

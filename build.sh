@@ -37,9 +37,9 @@ find agent/src -name '*.java' | sort > build/agent-sources.txt
 # `--release` exists from JDK 9; a JDK 8 build host falls back to -source/-target.
 JAVAC_MAJOR="$("$JAVAC" -version 2>&1 | sed -n 's/^javac \([0-9][0-9]*\).*/\1/p')"
 if [ "${JAVAC_MAJOR:-0}" -ge 9 ]; then
-  "$JAVAC" --release 8 -Xlint:all,-options -cp "$ASM_JAR" -d build/agent-classes @build/agent-sources.txt
+  "$JAVAC" --release 8 -Xlint:all,-options -cp "$ASM_JAR:$HOTSWAP_AGENT_JAR" -d build/agent-classes @build/agent-sources.txt
 else
-  "$JAVAC" -source 8 -target 8 -Xlint:-options -cp "$ASM_JAR" -d build/agent-classes @build/agent-sources.txt
+  "$JAVAC" -source 8 -target 8 -Xlint:-options -cp "$ASM_JAR:$HOTSWAP_AGENT_JAR" -d build/agent-classes @build/agent-sources.txt
 fi
 python3 agent/package.py build/agent-classes "$ASM_JAR" "$HOTSWAP_AGENT_JAR" "$AGENT_JAR" "$VERSION"
 

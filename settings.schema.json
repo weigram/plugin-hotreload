@@ -16,7 +16,10 @@
       "type": "string",
       "title": "编译方式",
       "description": "ide：调用 IDE 的 Build Module（推荐，增量、显示在 Build 窗口，需要 ide.commands 授权）。maven：手动命令使用 mvn compile；自动编译仍走 IDE。",
-      "enum": ["ide", "maven"],
+      "enum": [
+        "ide",
+        "maven"
+      ],
       "default": "ide"
     },
     "compileArgs": {
@@ -41,6 +44,12 @@
       "type": "boolean",
       "title": "显示通知",
       "description": "自动编译出错、缺少授权时弹出通知。正常的热更日志在应用的 Run 控制台里。",
+      "default": true
+    },
+    "unsupportedPopup": {
+      "type": "boolean",
+      "title": "不支持热更时弹窗（Unsupported-change popup）",
+      "description": "agent 检测到无法热更的结构修改时，在 IDE 中显示英文错误弹窗。关闭后不再弹窗；应用控制台的红色提示仍会保留。",
       "default": true
     }
   }
