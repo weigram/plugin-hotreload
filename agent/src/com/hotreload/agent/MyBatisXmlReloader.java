@@ -8,12 +8,17 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -44,6 +49,12 @@ public final class MyBatisXmlReloader {
     private static final String[] NAMESPACE_MAPS = {
             "mappedStatements", "resultMaps", "parameterMaps", "keyGenerators", "sqlFragments"
     };
+    private static final String[] INCOMPLETE_COLLECTIONS = {
+            "incompleteStatements", "incompleteResultMaps", "incompleteCacheRefs", "incompleteMethods"
+    };
+    /** Configurations are weak keys; the values only keep resource paths. */
+    private static final Map<Object, Set<String>> OWNED_RESOURCES =
+            Collections.synchronizedMap(new WeakHashMap<Object, Set<String>>());
 
     private MyBatisXmlReloader() {
     }
@@ -55,13 +66,41 @@ public final class MyBatisXmlReloader {
             Log.debug("not a mapper XML, skip " + xml);
             return;
         }
+        String resource = xml.toAbsolutePath().toString();
+        List<Object> candidates = new ArrayList<Object>();
+        List<Object> owners = new ArrayList<Object>();
         for (Object configuration : configurations) {
             if (!isMyBatisConfiguration(configuration)) {
                 continue;
             }
-            if (!hasNamespace(configuration, namespace)) {
+            boolean owner = ownsResource(configuration, resource);
+            if (!owner && !hasNamespace(configuration, namespace)) {
                 continue;
             }
+            candidates.add(configuration);
+            if (owner) {
+                owners.add(configuration);
+            }
+        }
+
+        List<Object> targets;
+        if (!owners.isEmpty()) {
+            targets = owners;
+        } else if (candidates.size() == 1) {
+            // Some applications load mapper XML through a custom resource
+            // loader that does not populate loadedResources; with one
+            // candidate there is no ambiguity.
+            targets = candidates;
+        } else {
+            targets = Collections.emptyList();
+        }
+        if (targets.isEmpty()) {
+            Log.warn("cannot determine which Configuration owns " + xml
+                    + " (namespace " + namespace + ", " + candidates.size() + " candidates); skipping");
+            return;
+        }
+        for (Object configuration : targets) {
+            trackResource(configuration, resource);
             synchronized (configuration) {
                 reload(configuration, xml, namespace);
             }
@@ -98,6 +137,7 @@ public final class MyBatisXmlReloader {
 
         try (InputStream input = Files.newInputStream(xml)) {
             parse(configuration, input, resource);
+            validateDeferred(configuration, namespace);
             int statements = count(configuration, namespace);
             if (statements == 0) {
                 Log.warn("mapper XML parsed but no statement was found: " + namespace + " (" + xml + ")");
@@ -126,6 +166,7 @@ public final class MyBatisXmlReloader {
     private static void restore(Object configuration, String namespace, String resource,
                                 Map<String, Map<String, Object>> backup,
                                 Map<String, Object> caches, Object cacheBackup) {
+        dropPending(configuration, namespace);
         unloadResource(configuration, resource);
         // Drop whatever the failed parse managed to add.
         for (String field : NAMESPACE_MAPS) {
@@ -151,6 +192,177 @@ public final class MyBatisXmlReloader {
                 caches.put(namespace, cacheBackup);
             }
         }
+    }
+
+    private static void validateDeferred(Object configuration, String namespace) throws Exception {
+        for (String methodName : new String[]{
+                "parsePendingResultMaps", "parsePendingCacheRefs",
+                "parsePendingStatements", "parsePendingMethods"}) {
+            try {
+                Method method = configuration.getClass().getMethod(methodName, boolean.class);
+                method.invoke(configuration, Boolean.FALSE);
+            } catch (NoSuchMethodException olderMyBatis) {
+                // MyBatis before 3.5.1 has no explicit pending API; the
+                // namespace check below still catches unresolved entries.
+            }
+        }
+        if (pendingForNamespace(configuration, namespace)) {
+            throw new IllegalStateException(
+                    "mapper XML has unresolved deferred elements for " + namespace);
+        }
+    }
+
+    private static boolean pendingForNamespace(Object configuration, String namespace) {
+        for (String fieldName : INCOMPLETE_COLLECTIONS) {
+            Collection<Object> pending = collection(configuration, fieldName);
+            if (pending == null) {
+                continue;
+            }
+            for (Object item : pending) {
+                if (namespace.equals(pendingNamespace(item))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void dropPending(Object configuration, String namespace) {
+        for (String fieldName : INCOMPLETE_COLLECTIONS) {
+            Collection<Object> pending = collection(configuration, fieldName);
+            if (pending == null) {
+                continue;
+            }
+            Iterator<Object> iterator = pending.iterator();
+            while (iterator.hasNext()) {
+                if (namespace.equals(pendingNamespace(iterator.next()))) {
+                    iterator.remove();
+                }
+            }
+        }
+    }
+
+    private static String pendingNamespace(Object pending) {
+        for (String fieldName : new String[]{"builderAssistant", "assistant"}) {
+            Object assistant = fieldValue(pending, fieldName);
+            if (assistant != null) {
+                String namespace = invokeString(assistant, "getCurrentNamespace");
+                if (namespace != null && !namespace.isEmpty()) {
+                    return namespace;
+                }
+            }
+        }
+        Object context = fieldValue(pending, "context");
+        if (context != null) {
+            String id = invokeString(context, "getStringAttribute", "id");
+            String namespace = namespaceOfId(id);
+            if (namespace != null) {
+                return namespace;
+            }
+        }
+        String id = fieldValue(pending, "id") instanceof String
+                ? (String) fieldValue(pending, "id") : null;
+        return namespaceOfId(id);
+    }
+
+    private static String namespaceOfId(String id) {
+        if (id == null) {
+            return null;
+        }
+        int dot = id.lastIndexOf('.');
+        return dot > 0 ? id.substring(0, dot) : null;
+    }
+
+    private static String invokeString(Object target, String methodName, Object... args) {
+        try {
+            Method method;
+            if (args.length == 0) {
+                method = target.getClass().getMethod(methodName);
+            } else {
+                method = target.getClass().getMethod(methodName, String.class);
+            }
+            Object value = method.invoke(target, args);
+            return value instanceof String ? (String) value : null;
+        } catch (Throwable unavailable) {
+            return null;
+        }
+    }
+
+    private static Object fieldValue(Object target, String name) {
+        try {
+            Field field = field(target.getClass(), name);
+            if (field == null) {
+                return null;
+            }
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (Throwable unavailable) {
+            return null;
+        }
+    }
+
+    private static boolean ownsResource(Object configuration, String resource) {
+        String normalized = normalizeResource(resource);
+        synchronized (OWNED_RESOURCES) {
+            Set<String> owned = OWNED_RESOURCES.get(configuration);
+            if (owned != null && owned.contains(normalized)) {
+                return true;
+            }
+        }
+        Set<String> loaded = set(configuration, "loadedResources");
+        if (loaded != null) {
+            for (String item : loaded) {
+                if (sameResource(item, resource)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void trackResource(Object configuration, String resource) {
+        String normalized = normalizeResource(resource);
+        synchronized (OWNED_RESOURCES) {
+            Set<String> owned = OWNED_RESOURCES.get(configuration);
+            if (owned == null) {
+                owned = new HashSet<String>();
+                OWNED_RESOURCES.put(configuration, owned);
+            }
+            owned.add(normalized);
+        }
+    }
+
+    private static boolean sameResource(String loaded, String target) {
+        String left = normalizeResource(loaded);
+        String right = normalizeResource(target);
+        if (left.isEmpty() || right.isEmpty() || left.startsWith("namespace:")) {
+            return false;
+        }
+        if (left.equals(right)) {
+            return true;
+        }
+        // Spring/MyBatis often stores the classpath-relative resource name
+        // ("mapper/UserMapper.xml") while the watcher sees an absolute path.
+        if (left.endsWith("/" + right) || right.endsWith("/" + left)) {
+            return true;
+        }
+        return left.indexOf('/') < 0 && left.equals(fileName(right));
+    }
+
+    private static String normalizeResource(String resource) {
+        String value = resource.replace('\\', '/');
+        if (value.startsWith("file:")) {
+            value = value.substring("file:".length());
+            if (value.startsWith("//")) {
+                value = value.substring(2);
+            }
+        }
+        return value;
+    }
+
+    private static String fileName(String path) {
+        int slash = path.lastIndexOf('/');
+        return slash >= 0 ? path.substring(slash + 1) : path;
     }
 
     private static boolean isMyBatisConfiguration(Object configuration) {
@@ -195,8 +407,12 @@ public final class MyBatisXmlReloader {
     private static void unloadResource(Object configuration, String resource) {
         Set<String> loaded = set(configuration, "loadedResources");
         if (loaded != null) {
-            loaded.remove(resource);
-            loaded.remove("file:" + resource);
+            Iterator<String> iterator = loaded.iterator();
+            while (iterator.hasNext()) {
+                if (sameResource(iterator.next(), resource)) {
+                    iterator.remove();
+                }
+            }
         }
     }
 
@@ -233,6 +449,21 @@ public final class MyBatisXmlReloader {
             Method getter = configuration.getClass().getMethod("getSqlFragments");
             Object value = getter.invoke(configuration);
             return value instanceof Map ? (Map<String, Object>) value : null;
+        } catch (Throwable failure) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Collection<Object> collection(Object target, String name) {
+        try {
+            Field field = field(target.getClass(), name);
+            if (field == null) {
+                return null;
+            }
+            field.setAccessible(true);
+            Object value = field.get(target);
+            return value instanceof Collection ? (Collection<Object>) value : null;
         } catch (Throwable failure) {
             return null;
         }

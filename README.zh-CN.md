@@ -1,7 +1,3 @@
----
-domd-id: 53407ed5-e8e0-47f3-ab2d-d206a362d970
----
-
 [English](README.md) | 简体中文
 
 
@@ -176,7 +172,7 @@ openidea-plugin pack . --key /secure/weigram.key --publisher weigram
 应用控制台里应看到：
 
 ```text
-15:00:05.744 [hotreload] INFO  Hot Reload agent 1.1.0 (pid 65453, OpenJDK 64-Bit Server VM 17.0.14+1-b1367.22)
+15:00:05.744 [hotreload] INFO  Hot Reload agent 1.1.1 (pid 65453, OpenJDK 64-Bit Server VM 17.0.14+1-b1367.22)
 15:00:05.900 [hotreload] INFO  class/Spring engine: HotSwapAgent 2.0.5 (autoHotswap, Spring plugin on, MyBatis plugins off)
 15:00:05.950 [hotreload] INFO  watching 1 class directories: …/target/classes
 15:00:08.137 HOTSWAP AGENT: … RELOAD … Reloading classes [com.qctc.lab.service.DemoService] (autoHotswap)
@@ -305,11 +301,14 @@ agent 启动时会打印 `watching N class directories`。如果没有这一行�
 # 结构变更矩阵；必须用 JBR，并自动带 -XX:+AllowEnhancedClassRedefinition
 JAVA=/path/to/jbr/bin/java ./test/structure.sh
 
+# 延迟解析错误回滚 + 按 Configuration 定向刷新（issue #1 回归）
+./test/reloader-regression.sh
+
 # 对每个已安装 JDK 分别跑上面两个脚本
 ./test/jdk-matrix.sh
 ```
 
-`structure.sh` 分成三个独立 JVM 组，失败的重定义不会污染下一组；完整矩阵由 `test/jdk-matrix.sh` 生成。
+`structure.sh` 分成三个独立 JVM 组，失败的重定义不会污染下一组；`reloader-regression.sh` 覆盖 issue #1 的延迟错误回滚和按 Configuration 定向刷新；完整矩阵由 `test/jdk-matrix.sh` 生成。
 
 `test/jdk-matrix.sh` 默认用 `/usr/libexec/java_home -V` 发现的 JDK；也可以指定：
 
