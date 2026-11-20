@@ -1,13 +1,13 @@
 id = "weigram.hotreload"
 name = "Hot Reload"
-version = "1.1.0"
+version = "1.2.0"
 description = "Java / MyBatis XML hot reload for OpenIDEA: auto-build on save, redefine classes and refresh MyBatis mapper XML in the running JVM without restarting the application."
 authors = ["weigram"]
 homepage = "https://github.com/weigram/plugin-hotreload"
 license = "GPL-2.0-only"
 icon = "icon.svg"
 categories = ["tools", "frameworks"]
-change-notes = "1.1.0 — 合并 HotSwapAgent 2.0.5：Spring bean/controller/AOP 重处理、类重定义由 HA 负责；保留自研 Mapper XML 刷新；运行时打开 JDK 模块，不需要 -XX:HotswapAgent=external 或 --add-opens。右键只保留 Run/Debug，图标 #11e3e9；1.0.1 增加右键 Run/Debug；1.0.0 从零重写。"
+change-notes = "1.2.0 — 增加不支持热更时的英文红色控制台提示与可选 IDE 弹窗；推荐 JBR / DCEVM 并补充下载和 OpenIDEA 更换 JDK 说明。1.1.1 — 修复 Mapper XML 延迟解析错误未回滚、失败后无法重试，以及同名 namespace 被跨 Configuration 刷新；增加回归测试。1.1.0 — 合并 HotSwapAgent 2.0.5：Spring bean/controller/AOP 重处理、类重定义由 HA 负责；保留自研 Mapper XML 刷新；运行时打开 JDK 模块，不需要 -XX:HotswapAgent=external 或 --add-opens。右键只保留 Run/Debug，图标 #11e3e9；1.0.1 增加右键 Run/Debug；1.0.0 从零重写。"
 engines.openidea = "^1.10"
 wasm = "dist/plugin.wasm"
 activation = ["on-event:files-changed"]

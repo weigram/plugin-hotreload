@@ -101,7 +101,9 @@ final class Agent {
             ClassLoader loader = Agent.class.getClassLoader();
             Class<?> agent = Class.forName("org.hotswap.agent.HotswapAgent", true, loader);
             Method premain = agent.getMethod("premain", String.class, Instrumentation.class);
+            installHotswapLogger();
             premain.invoke(null, HOTSWAP_AGENT_ARGS, instrumentation);
+            installHotswapLogger();
             return true;
         } catch (InvocationTargetException failure) {
             Log.warn("HotSwapAgent premain failed: " + failure.getCause());
@@ -109,6 +111,20 @@ final class Agent {
         } catch (Throwable failure) {
             Log.warn("HotSwapAgent is not available: " + failure);
             return false;
+        }
+    }
+
+    private static void installHotswapLogger() {
+        try {
+            ClassLoader loader = Agent.class.getClassLoader();
+            Class<?> logger = Class.forName("org.hotswap.agent.logging.AgentLogger", true, loader);
+            Class<?> handler = Class.forName("org.hotswap.agent.logging.AgentLoggerHandler", true, loader);
+            Object custom = Class.forName("com.hotreload.agent.HotswapLogHandler", true, loader)
+                    .getDeclaredConstructor().newInstance();
+            logger.getMethod("setHandler", handler).invoke(null, custom);
+            Log.debug("HotSwapAgent log handler installed: " + custom.getClass().getName());
+        } catch (Throwable unavailable) {
+            Log.warn("HotSwapAgent logger handler is unavailable: " + unavailable);
         }
     }
 
@@ -121,7 +137,7 @@ final class Agent {
         } catch (Throwable ignored) {
             // fall through
         }
-        return "1.1.0";
+        return "1.2.0";
     }
 
     private static boolean isJetBrainsRuntime() {

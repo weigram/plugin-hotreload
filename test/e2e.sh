@@ -13,6 +13,9 @@ FIXTURE="$PWD/fixture"
 AGENT="$(cd .. && pwd)/agent/hotreload-agent.jar"
 
 JAVA="${JAVA:-java}"
+if [ "$JAVA" != "java" ]; then
+  export JAVA_HOME="$(cd "$(dirname "$JAVA")/.." && pwd)"
+fi
 JAVAC="${JAVAC:-javac}"
 MVN="${MVN:-mvn}"
 LOG="$FIXTURE/target/agent-e2e.log"
@@ -44,13 +47,6 @@ wait_for() {
   return 1
 }
 
-JAVA_MAJOR="$("$JAVA" -version 2>&1 | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p' | head -1)"
-if [ "${JAVA_MAJOR:-0}" -lt 11 ]; then
-  echo "SKIP: the fixture's H2 2.3 needs Java 11+; JDK 8 class reload was verified manually"
-  echo "      (see README: JDK 8 Corretto, method body v3 -> v4)."
-  exit 0
-fi
-
 echo "== build fixture =="
 ( cd "$FIXTURE" && "$MVN" -B -q -DskipTests clean compile dependency:build-classpath \
     -Dmdep.outputFile=target/cp.txt )
@@ -77,6 +73,7 @@ path.write_text(path.read_text().replace("XML1", "XML2"))
 PY
 wait_for "VALUE XML2" 10 || fail "mapper XML was not reloaded"
 grep -q "reloaded mapper XML" "$LOG" || fail "no XML reload log line"
+echo "RESULT|xml|PASS|"
 
 echo "== redefine a method body =="
 mkdir -p "$FIXTURE/target/e2e-src"
@@ -89,6 +86,7 @@ PY
 "$JAVAC" -source 8 -target 8 -cp "$CP" -d "$CLASSES" "$FIXTURE/target/e2e-src/App.java" 2>/dev/null
 wait_for "VALUE2 XML2" 10 || fail "class redefinition was not applied"
 grep -Eq "reloaded demo.App|Reloading classes \\[demo.App\\]" "$LOG" || fail "no class reload log line"
+echo "RESULT|body|PASS|"
 
 STARTS="$(grep -c '### STARTED' "$LOG" || true)"
 [ "$STARTS" = "1" ] || fail "the process restarted ($STARTS starts)"

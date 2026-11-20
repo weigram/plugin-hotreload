@@ -86,6 +86,7 @@ final class ClassRedefiner {
                 || message.contains("change field")
                 || message.contains("is not supported");
         if (schema) {
+            UnsupportedWarning.warn(className + ": " + message);
             if (!schemaHintShown) {
                 schemaHintShown = true;
                 Log.warn("结构变更没有生效：" + className + "（" + message + "）");
