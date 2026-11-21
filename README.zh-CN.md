@@ -57,10 +57,6 @@ JVM 拒绝结构变更时，agent 会在应用控制台打印英文红色提示�
 [hotreload] ERROR  Restart the application. For supported structural changes use JBR or DCEVM with -XX:+AllowEnhancedClassRedefinition.
 ```
 
-agent 同时会在应用工作目录写入 `.hotreload-unsupported`；IDE 插件检测到该文件后可以弹出错误提示。弹窗由 **Settings › Plugins › Hot Reload → Unsupported-change popup** 控制；取消勾选后不再弹窗，控制台的红色提示仍保留。
-
-marker 只包含时间戳、类名和失败原因，不包含本地文件路径；可以安全删除，也不要提交到仓库。
-
 ## 特性
 
 - **保存即热更**：保存 Java 文件或 MyBatis Mapper XML 后自动触发 IDE 构建，agent 在运行中的 JVM 里重定义类或刷新 Mapper 语句；Run 和 Debug 都生效，应用不重启。
@@ -71,7 +67,7 @@ marker 只包含时间戳、类名和失败原因，不包含本地文件路径�
 - **无额外 agent**：不需要外部 `hotswap-agent-2.0.5.jar`，不需要 `-XX:HotswapAgent=external`，也不需要 `--add-opens`。
 - **IDE 集成**：`javaAgents` 自动覆盖 Application / Spring Boot / JAR Application；保留 Run/Debug 右键；自动编译带防抖，构建后焦点回到编辑器。
 - **诊断与兜底**：内置授权/项目 JDK/输出目录诊断、复制增强 VM 参数；HA 启动失败时回退自研 `ClassRedefiner`，方法体和 XML 仍可用。
-- **不支持热更提示**：控制台英文红色提示；可选 IDE 弹窗，可在 Settings 中关闭。
+- **不支持热更提示**：控制台英文红色提示，附带重启 / JBR 参数说明。
 
 ### 相比 OpenIDEA 自带热更新的补充
 
@@ -268,7 +264,6 @@ Run / Debug 不自己起 `mvn`，而是调用 IDE 的 `run.runContext` / `run.de
 | 自动编译防抖（毫秒）  | 1200                     | 连续保存合并成一次构建                                                                 |
 | 自动编译后回到编辑器  | 开                        | 触发 IDE 构建后把焦点从 Build 窗口还给编辑器；Build 窗口仍会打开                                   |
 | 显示通知        | 开                        | 只在错误/缺授权时提示；正常热更日志在 Run 控制台                                                 |
-| 不支持热更时弹窗    | 开                        | agent 检测到 JVM 拒绝的结构修改时弹 IDE 提示；取消勾选后不再弹窗，控制台红色提示保留                          |
 
 ## Capabilities and security
 
@@ -406,11 +401,29 @@ agent 启动时会打印 `watching N class directories`。如果没有这一行�
 
 ## 测试
 
-仓库自带五个不依赖 IDE 的测试/矩阵脚本：
+仓库自带七个不依赖 IDE 的测试/矩阵脚本：
+
+### 测试用例
+
+| 脚本 | 覆盖内容 | 运行要求 |
+| --- | --- | --- |
+| `test/e2e.sh` | 普通 MyBatis 的 Mapper XML 刷新 + 方法体重定义 | JDK 8+ |
+| `test/multimodule.sh` | A→B Maven 多模块：两个输出目录都被监听；只重编译 B 时 A 看到 B 的新方法体；随后 A 自身也能重定义；进程不重启 | JDK 8+、Maven |
+| `test/mybatis-plus-xml.sh` | MyBatis-Plus 注入的 `selectList` 在 resultMap-only XML 刷新后仍存在；XML 语句随后从 `XML1` 刷到 `XML2` | JDK 8+、Maven |
+| `test/structure.sh` | 结构变更矩阵，每个 case 独立 JVM | JBR；脚本自动加 `-XX:+AllowEnhancedClassRedefinition` |
+| `test/reloader-regression.sh` | Mapper XML 延迟解析错误回滚、按 `Configuration` 定向刷新、保留注入的 BaseMapper 语句 | JDK 8+ |
+| `test/capability.sh` | 按操作类型逐个探测，每个 case 新 JVM | JDK、JBR 或 DCEVM |
+| `test/jdk-matrix.sh` | 对每个已安装 JDK 运行 e2e、多模块、MyBatis-Plus 和结构测试 | 已发现的 JDK |
 
 ```bash
 # 方法体 + Mapper XML；JDK 8 / 11 / 17 / 21 / 25 都可跑
 ./test/e2e.sh
+
+# A 依赖 B：只重新编译 B，A 的下一次调用要看到 B 的新方法体
+./test/multimodule.sh
+
+# MyBatis-Plus：XML 刷新不能删掉注入的 BaseMapper 语句
+./test/mybatis-plus-xml.sh
 
 # 结构变更矩阵；必须用 JBR，并自动带 -XX:+AllowEnhancedClassRedefinition
 JAVA=/path/to/jbr/bin/java ./test/structure.sh
@@ -422,11 +435,11 @@ JAVA=/path/to/jbr/bin/java ./test/structure.sh
 JAVA=/path/to/jdk/bin/java ./test/capability.sh
 JAVA=/path/to/dcevm/bin/java ./test/capability.sh
 
-# 对每个已安装 JDK 分别跑 e2e/structure
+# 对每个已安装 JDK 分别跑 e2e/multimodule/MyBatis-Plus/structure
 ./test/jdk-matrix.sh
 ```
 
-`structure.sh` 分成三个独立 JVM 组，失败的重定义不会污染下一组；`reloader-regression.sh` 覆盖 issue #1 的延迟错误回滚和按 Configuration 定向刷新；`capability.sh` 逐个操作测试常规 JDK / JBR / DCEVM；`jdk-matrix.sh` 按 JDK 运行 e2e/structure。
+所有脚本都不依赖 IDE；`jdk-matrix.sh` 会对每个已发现的 JDK 运行表格中的 e2e、多模块、MyBatis-Plus 和结构测试。
 
 `test/jdk-matrix.sh` 默认用 `/usr/libexec/java_home -V` 发现的 JDK；也可以指定：
 
@@ -439,7 +452,7 @@ JDK_MATRIX_HOMES="$JAVA8:$JAVA11:$JBR17:$JBR21:$JBR25:$JAVA21:$JAVA25" \
   ./test/jdk-matrix.sh
 ```
 
-按操作类型的真实能力以上面的“能力边界”三张表为准；`test/jdk-matrix.sh` 只负责按 JDK 运行 e2e/structure，不再改写 README。
+按操作类型的真实能力以上面的“能力边界”三张表为准；`test/jdk-matrix.sh` 只负责按 JDK 运行 e2e/MyBatis-Plus/structure，不再改写 README。
 
 JDK 8 使用 fixture 的 `jdk8` Maven profile，自动切到 H2 1.4.200；其他 JDK 使用 H2 2.3。
 

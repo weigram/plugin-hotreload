@@ -46,10 +46,6 @@ When the JVM refuses a structural change, the agent prints an English red warnin
 [hotreload] ERROR  Restart the application. For supported structural changes use JBR or DCEVM with -XX:+AllowEnhancedClassRedefinition.
 ```
 
-The agent also writes `.hotreload-unsupported` in the application working directory. The IDE plugin can show an error popup for that marker. The popup is controlled by **Settings › Plugins › Hot Reload → Unsupported-change popup**; uncheck it to never show the popup again. The red console warning remains.
-
-The marker contains only a timestamp, class name, and failure reason — no local file paths. It is safe to delete and should not be committed.
-
 ## 1. Features
 
 - **Method-body hot reload** on JDK 8–25, in both **Run** and **Debug** configurations.
@@ -60,7 +56,7 @@ The marker contains only a timestamp, class name, and failure reason — no loca
 - **No external HotSwapAgent jar** and no `-XX:HotswapAgent=external`.
 - **No `--add-opens`** for the application: the agent opens the JDK packages it needs at runtime.
 - **Fallback redefiner** when HotSwapAgent cannot start: method bodies and XML still work, but Spring reprocessing is unavailable.
-- **Unsupported-change diagnostics**: an English red console warning, plus an optional IDE popup that can be turned off in Settings.
+- **Unsupported-change diagnostics**: an English red console warning with the restart / JBR guidance.
 
 ### What this adds beyond OpenIDEA's built-in HotSwap
 
@@ -186,7 +182,6 @@ There is no network capability and no telemetry.
 | Auto-compile debounce (ms)      | `1200`                   | Coalesces consecutive saves into one build.                                                                  |
 | Refocus editor after auto build | on                       | The Build window still opens, but focus returns to the editor.                                               |
 | Notifications                   | on                       | Errors and missing grants. Normal reload logs stay in the application Run console.                           |
-| Unsupported-change popup        | on                       | Show an IDE popup when the agent detects a JVM-rejected structural change. Uncheck to never show it again.    |
 
 ### Structural changes
 
@@ -225,7 +220,7 @@ The editor, editor-tab, and project-tree context menus contain only **Run** and 
 
 ## 4. Test Status
 
-The per-operation tables below are the authoritative capability results. `test/jdk-matrix.sh` still runs the e2e/structure tests per JDK, but it no longer rewrites README.
+The per-operation tables below are the authoritative capability results. `test/jdk-matrix.sh` still runs the e2e, multi-module, MyBatis-Plus XML and structure tests per JDK, but it no longer rewrites README.
 
 ### Per-operation capability
 
@@ -306,10 +301,28 @@ DCEVM 8u282 and 11.0.15+1 are macOS x86_64 builds; they were run on Apple Silico
 
 \* Replacing a superclass is a class-hierarchy change. Standard JDK, JBR, and DCEVM hot reload cannot apply it; JRebel does not reload it either. Restart the application.
 
+### Test cases
+
+| Script | Coverage | Requirements |
+| --- | --- | --- |
+| `test/e2e.sh` | Plain MyBatis mapper XML reload and method-body redefinition | JDK 8+ |
+| `test/multimodule.sh` | A→B Maven reactor: both output directories watched; recompiling B alone updates A, then A itself is redefined; one process | JDK 8+, Maven |
+| `test/mybatis-plus-xml.sh` | MyBatis-Plus `selectList` survives a resultMap-only XML reload; the XML statement then reloads `XML1` → `XML2` | JDK 8+, Maven |
+| `test/structure.sh` | Structural-change matrix in isolated JVMs | JBR; the script adds `-XX:+AllowEnhancedClassRedefinition` |
+| `test/reloader-regression.sh` | Deferred mapper XML error rollback, per-`Configuration` targeting, injected BaseMapper statement preservation | JDK 8+ |
+| `test/capability.sh` | Per-operation probe, one fresh JVM per case | JDK, JBR, or DCEVM |
+| `test/jdk-matrix.sh` | Runs e2e, multi-module, MyBatis-Plus and structure per installed JDK | Discovered JDKs |
+
 Test commands:
 
 ```bash
 ./test/e2e.sh
+
+# A depends on B; recompiling B only must update A's behavior
+./test/multimodule.sh
+
+# MyBatis-Plus: XML reload must not delete injected BaseMapper statements
+./test/mybatis-plus-xml.sh
 
 JAVA=/path/to/jbr/bin/java ./test/structure.sh
 
@@ -323,7 +336,7 @@ JAVA=/path/to/dcevm/bin/java ./test/capability.sh
 JBR_MATRIX_DIR=/path/to/jbr ./test/jdk-matrix.sh
 ```
 
-`test/e2e.sh` covers Mapper XML and method-body redefinition. `test/structure.sh` runs the structural matrix in isolated JVMs. `test/reloader-regression.sh` covers issue #1: deferred-error rollback and per-Configuration targeting. `test/capability.sh` probes each operation in a fresh JVM. `test/jdk-matrix.sh` runs e2e/structure against every JDK.
+Every script is self-contained and needs no IDE. `test/jdk-matrix.sh` runs the first, second and third rows plus the structural matrix for each discovered JDK.
 
 ### Direct OpenIDEA test
 

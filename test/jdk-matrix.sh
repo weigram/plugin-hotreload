@@ -65,6 +65,24 @@ for home in "${homes[@]}"; do
     pass=$((pass + 1))
   fi
 
+  multi_out="$(JAVA="$java" JAVAC="$home/bin/javac" JAVA_HOME="$home" ./multimodule.sh 2>&1)"
+  multi_rc=$?
+  printf '%s\n' "$multi_out"
+  if [ "$multi_rc" -ne 0 ]; then
+    fail=$((fail + 1))
+  else
+    pass=$((pass + 1))
+  fi
+
+  mp_out="$(JAVA="$java" JAVAC="$home/bin/javac" JAVA_HOME="$home" ./mybatis-plus-xml.sh 2>&1)"
+  mp_rc=$?
+  printf '%s\n' "$mp_out"
+  if [ "$mp_rc" -ne 0 ]; then
+    fail=$((fail + 1))
+  else
+    pass=$((pass + 1))
+  fi
+
   structure_out="$(JAVA="$java" JAVAC="$home/bin/javac" JAVA_HOME="$home" ./structure.sh 2>&1)"
   structure_rc=$?
   printf '%s\n' "$structure_out"

@@ -1,5 +1,8 @@
 import com.hotreload.agent.MyBatisXmlReloader;
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
+import org.apache.ibatis.mapping.MappedStatement;
+import org.apache.ibatis.mapping.SqlCommandType;
+import org.apache.ibatis.builder.StaticSqlSource;
 import org.apache.ibatis.session.Configuration;
 
 import java.io.InputStream;
@@ -42,6 +45,15 @@ public final class ReloaderRegression {
                 + "\n</mapper>\n").getBytes(StandardCharsets.UTF_8));
     }
 
+    private static void addInjected(Configuration configuration, String id) {
+        MappedStatement statement = new MappedStatement.Builder(
+                configuration, id, new StaticSqlSource(configuration, "SELECT 99"),
+                SqlCommandType.SELECT)
+                .resource("interface review.Mapper")
+                .build();
+        configuration.addMappedStatement(statement);
+    }
+
     private static void check(String what, String actual, String expected) {
         if (!expected.equals(actual)) {
             throw new AssertionError(what + ": expected [" + expected + "] but got [" + actual + "]");
@@ -73,6 +85,24 @@ public final class ReloaderRegression {
         write(bad, "<select id=\"value\" resultType=\"java.lang.String\">SELECT 4</select>");
         MyBatisXmlReloader.reload(bad, Arrays.asList(cc));
         check("corrected file reloads after failure", sql(cc), "SELECT 4");
+
+        Path generated = dir.resolve("generated/ReviewMapper.xml");
+        write(generated, "<select id=\"value\" resultType=\"java.lang.String\">SELECT 1</select>");
+        Configuration cg = load(generated, "generated/ReviewMapper.xml");
+        addInjected(cg, "review.Mapper.selectList");
+        write(generated, "<resultMap id=\"m\" type=\"java.util.HashMap\">"
+                + "<result column=\"c\" property=\"x\"/></resultMap>");
+        MyBatisXmlReloader.reload(generated, Arrays.asList(cg));
+        check("injected BaseMapper statement survives result-map-only reload",
+                cg.hasStatement("review.Mapper.selectList") ? "yes" : "no", "yes");
+        check("removed XML statement is gone",
+                cg.hasStatement("review.Mapper.value") ? "yes" : "no", "no");
+
+        write(generated, "<select id=\"value\" resultType=\"java.lang.String\">SELECT 5</select>");
+        MyBatisXmlReloader.reload(generated, Arrays.asList(cg));
+        check("XML statement reloads next to injected statement", sql(cg), "SELECT 5");
+        check("injected BaseMapper statement still present",
+                cg.hasStatement("review.Mapper.selectList") ? "yes" : "no", "yes");
         System.out.println("RELOADER REGRESSION PASS");
     }
 }

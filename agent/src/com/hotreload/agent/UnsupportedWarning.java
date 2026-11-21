@@ -1,22 +1,10 @@
 package com.hotreload.agent;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-
 /**
  * One red, English warning per process for a change the JVM refused.
- *
- * <p>The same text is also written to {@code .hotreload-unsupported} in the
- * application working directory. The IDE plugin watches that marker and can
- * show a popup; the marker contains only a timestamp and the class name /
- * failure reason, never a file path from the developer machine.</p>
  */
 final class UnsupportedWarning {
 
-    private static final String MARKER = ".hotreload-unsupported";
     private static volatile boolean shown;
 
     private UnsupportedWarning() {
@@ -52,7 +40,6 @@ final class UnsupportedWarning {
                 + "changes use JetBrains Runtime (JBR) or DCEVM with "
                 + "-XX:+AllowEnhancedClassRedefinition.\u001B[0m");
         System.out.flush();
-        writeMarker(line);
     }
 
     private static String chain(Throwable failure) {
@@ -70,17 +57,5 @@ final class UnsupportedWarning {
     private static String clean(String detail) {
         String value = detail == null ? "" : detail.replace('\r', ' ').replace('\n', ' ');
         return value.length() > 500 ? value.substring(0, 500) : value;
-    }
-
-    private static void writeMarker(String detail) {
-        try {
-            Path marker = Paths.get(System.getProperty("user.dir", "."))
-                    .toAbsolutePath().resolve(MARKER);
-            String text = System.currentTimeMillis() + "\t" + detail + "\n";
-            Files.write(marker, text.getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (Throwable ignored) {
-            // The console warning is the primary signal; the marker is optional.
-        }
     }
 }

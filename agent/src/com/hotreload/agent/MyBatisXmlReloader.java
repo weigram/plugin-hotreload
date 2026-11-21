@@ -45,6 +45,9 @@ public final class MyBatisXmlReloader {
 
     private static final Pattern NAMESPACE = Pattern.compile(
             "namespace\\s*=\\s*[\"']([^\"']+)[\"']");
+    private static final Pattern STATEMENT = Pattern.compile(
+            "<\\s*(?:select|insert|update|delete)\\b[^>]*?\\bid\\s*=\\s*[\"']([^\"']+)[\"']",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final int MAX_XML_BYTES = 4 * 1024 * 1024;
     private static final String[] NAMESPACE_MAPS = {
             "mappedStatements", "resultMaps", "parameterMaps", "keyGenerators", "sqlFragments"
@@ -109,6 +112,7 @@ public final class MyBatisXmlReloader {
 
     private static void reload(Object configuration, Path xml, String namespace) {
         String resource = xml.toAbsolutePath().toString();
+        Set<String> xmlStatements = statementIds(xml);
         Map<String, Map<String, Object>> backup = new HashMap<String, Map<String, Object>>();
         Object cacheBackup = null;
 
@@ -121,26 +125,38 @@ public final class MyBatisXmlReloader {
             if (values == null) {
                 continue;
             }
-            Map<String, Object> removed = new LinkedHashMap<String, Object>();
+            Map<String, Object> snapshot = new LinkedHashMap<String, Object>();
             String prefix = namespace + ".";
             Iterator<String> keys = values.keySet().iterator();
             while (keys.hasNext()) {
                 String key = keys.next();
-                if (key.startsWith(prefix)) {
-                    removed.put(key, values.get(key));
-                    keys.remove();
+                if (!key.startsWith(prefix)) {
+                    continue;
                 }
+                Object value = values.get(key);
+                snapshot.put(key, value);
+                // MyBatis-Plus injects BaseMapper methods (selectList,
+                // selectById, ...) into the same namespace from a different
+                // resource. Removing every namespace entry would delete those
+                // generated statements when the XML only contains resultMaps.
+                if ("mappedStatements".equals(field)
+                        && !xmlStatements.contains(key.substring(prefix.length()))
+                        && !statementFromResource(value, resource)) {
+                    continue;
+                }
+                keys.remove();
             }
-            backup.put(field, removed);
+            backup.put(field, snapshot);
         }
         unloadResource(configuration, resource);
 
         try (InputStream input = Files.newInputStream(xml)) {
             parse(configuration, input, resource);
             validateDeferred(configuration, namespace);
-            int statements = count(configuration, namespace);
+            int statements = countStatements(configuration, namespace, xmlStatements);
             if (statements == 0) {
-                Log.warn("mapper XML parsed but no statement was found: " + namespace + " (" + xml + ")");
+                Log.debug("mapper XML has no SQL statements (result maps only): "
+                        + display(xml) + " -> " + namespace);
             } else {
                 Log.info("reloaded mapper XML " + display(xml) + " -> " + namespace
                         + " (" + statements + " statements)");
@@ -389,7 +405,7 @@ public final class MyBatisXmlReloader {
         return false;
     }
 
-    private static int count(Object configuration, String namespace) {
+    private static int countStatements(Object configuration, String namespace, Set<String> xmlStatements) {
         Map<String, Object> statements = map(configuration, "mappedStatements");
         if (statements == null) {
             return 0;
@@ -397,11 +413,37 @@ public final class MyBatisXmlReloader {
         int count = 0;
         String prefix = namespace + ".";
         for (String key : statements.keySet()) {
-            if (key.startsWith(prefix)) {
+            if (key.startsWith(prefix) && xmlStatements.contains(key.substring(prefix.length()))) {
                 count++;
             }
         }
         return count;
+    }
+
+    private static boolean statementFromResource(Object statement, String resource) {
+        String statementResource = invokeString(statement, "getResource");
+        return statementResource != null && sameResource(statementResource, resource);
+    }
+
+    private static Set<String> statementIds(Path xml) {
+        Set<String> ids = new HashSet<String>();
+        try {
+            long size = Files.size(xml);
+            if (size <= 0 || size > MAX_XML_BYTES) {
+                return ids;
+            }
+            String text = new String(Files.readAllBytes(xml), StandardCharsets.ISO_8859_1);
+            Matcher matcher = STATEMENT.matcher(text);
+            while (matcher.find()) {
+                String id = matcher.group(1).trim();
+                if (!id.isEmpty()) {
+                    ids.add(id);
+                }
+            }
+        } catch (Throwable failure) {
+            Log.debug("cannot read XML statements " + xml + ": " + failure);
+        }
+        return ids;
     }
 
     private static void unloadResource(Object configuration, String resource) {

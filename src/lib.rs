@@ -27,7 +27,6 @@ struct HotReload {
     capabilities: Vec<String>,
     last_build_ms: u64,
     warned_missing_permission: bool,
-    last_unsupported_marker: Option<String>,
 }
 
 impl Plugin for HotReload {
@@ -60,7 +59,6 @@ impl Plugin for HotReload {
     }
 
     fn handle_events(&mut self, events: &[Event], ctx: &Invocation) {
-        self.notify_unsupported(ctx);
         for event in events {
             if let Event::FilesChanged(changes) = event {
                 if let Err(error) = self.on_files_changed(changes, ctx) {
@@ -430,39 +428,6 @@ impl HotReload {
         if host::set_window_status_item(STATUS_ID, &item).is_err() {
             host::set_status_item(STATUS_ID, &item);
         }
-    }
-
-    /// The agent writes this marker when the JVM refused a structural change.
-    /// The popup is optional; the red console warning is always emitted by the agent.
-    fn notify_unsupported(&mut self, ctx: &Invocation) {
-        if !host::setting_bool("unsupportedPopup").unwrap_or(true)
-            || !host::setting_bool("notifications").unwrap_or(true)
-        {
-            return;
-        }
-        let Some(project) = ctx.project() else {
-            return;
-        };
-        let Ok(root) = project.root() else {
-            return;
-        };
-        let path = format!("{root}/.hotreload-unsupported");
-        let Ok(text) = project.read_file(&path) else {
-            return;
-        };
-        let text = text.trim();
-        if text.is_empty() || self.last_unsupported_marker.as_deref() == Some(text) {
-            return;
-        }
-        self.last_unsupported_marker = Some(text.to_string());
-        let detail = text.split_once('\t').map(|(_, value)| value).unwrap_or(text);
-        host::notify(
-            NotificationLevel::Error,
-            "Hot Reload · Unsupported change",
-            &format!(
-                "{detail}\n\nRestart the application. For supported structural changes use JBR or DCEVM with -XX:+AllowEnhancedClassRedefinition. Disable this popup in Settings › Plugins › Hot Reload."
-            ),
-        );
     }
 
     fn warn(&self, title: &str, body: &str) {

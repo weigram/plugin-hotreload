@@ -126,6 +126,8 @@ stop_app() {
 }
 
 failures=0
+# The agent must never create a repository-visible marker file.
+rm -f .hotreload-unsupported
 echo "== build fixture =="
 ( cd "$FIXTURE" && "$MVN" -B -q -DskipTests clean compile )
 
@@ -158,6 +160,11 @@ start_app
 apply_variant parent
 expect_unsupported "replace superclass" "STATE value=B extra=NO field=NO marker=NO marker2=NO deprecated=false"
 stop_app
+
+if [ -e .hotreload-unsupported ]; then
+  echo "FAIL: agent wrote .hotreload-unsupported in the working directory" >&2
+  exit 1
+fi
 
 if [ "$failures" -ne 0 ]; then
   echo
