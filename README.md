@@ -231,6 +231,21 @@ The per-operation tables below are the authoritative capability results. `test/j
 
 Each case starts a fresh JVM. Method body and Mapper XML do not use `-XX`; structural JBR cases use `-XX:+AllowEnhancedClassRedefinition`.
 
+### Which operations need `-XX:+AllowEnhancedClassRedefinition`?
+
+| Operation | Needs the flag? |
+| --- | --- |
+| Method body | No |
+| Mapper XML | No |
+| Add/remove class annotation | No |
+| Add/remove method or field | Yes — JBR/DCEVM only |
+| Add interface | Yes — JBR/DCEVM only |
+| Remove/replace interface | Yes — only JBR 21/25; still fails on JBR 11/17 and DCEVM |
+| Change method signature | Yes — JBR/DCEVM only |
+| Replace superclass | Yes, but still fails; restart the application |
+
+Only JBR and DCEVM accept the flag; a standard JDK rejects it at startup. The flag is not needed for method bodies, Mapper XML, or adding/removing class annotations.
+
 #### Standard JDK
 
 | Operation | JDK 8 | JDK 11 | JDK 17 | JDK 21 | JDK 25 |

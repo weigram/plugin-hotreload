@@ -286,6 +286,21 @@ There is no network capability and no telemetry. The bundled HotSwapAgent 2.0.5 
 
 测试工程：`test/fixture-structure`。每个 case 启动一个**全新的 JVM**，修改后重新编译；进程 PID 始终不变。方法体 / Mapper XML 不添加 `-XX`；结构变更只在 JBR 上带 `-XX:+AllowEnhancedClassRedefinition`。以下结果来自 `test/capability.sh` 的直接测试。
 
+### 哪些操作需要 `-XX:+AllowEnhancedClassRedefinition`
+
+| 操作         | 是否需要该参数                             |
+| ---------- | ----------------------------------- |
+| 方法体        | 否                                   |
+| Mapper XML | 否                                   |
+| 增加/删除类注解   | 否                                   |
+| 增加/删除方法/字段 | 是，仅 JBR/DCEVM                       |
+| 增加接口       | 是，仅 JBR/DCEVM                       |
+| 删除/替换接口    | 是，仅 JBR 21/25；JBR 11/17 和 DCEVM 仍失败 |
+| 修改方法签名     | 是，仅 JBR/DCEVM                       |
+| 替换父类       | 是，但仍失败，需要重启应用                       |
+
+只有 JBR 和 DCEVM 接受该参数；标准 JDK 启动时会直接报错。方法体、Mapper XML、类注解增删不需要该参数。
+
 ### 常规 JDK（非 JBR）
 
 | 操作         | JDK 8    | JDK 11   | JDK 17   | JDK 21   | JDK 25   |
