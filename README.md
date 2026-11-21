@@ -246,7 +246,7 @@ Each case starts a fresh JVM. Method body and Mapper XML do not use `-XX`; struc
 | Add interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
 | Remove interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
 | Replace interface | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
-| Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Replace superclass | ❌ hierarchy change* | ❌ hierarchy change* | ❌ hierarchy change* | ❌ hierarchy change* | ❌ hierarchy change* |
 | Change method signature | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses | ❌ JVM refuses |
 
 #### JBR
@@ -264,7 +264,7 @@ Each case starts a fresh JVM. Method body and Mapper XML do not use `-XX`; struc
 | Add interface | ✅ | ✅ | ✅ | ✅ |
 | Remove interface | ❌ hierarchy change | ❌ hierarchy change | ✅ | ✅ |
 | Replace interface | ❌ hierarchy change | ❌ hierarchy change | ✅ | ✅ |
-| Replace superclass | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change | ❌ hierarchy change |
+| Replace superclass | ❌ hierarchy change* | ❌ hierarchy change* | ❌ hierarchy change* | ❌ hierarchy change* |
 | Change method signature | ✅ | ✅ | ✅ | ✅ |
 
 JBR 11 here is `JBR-11.0.15.10-2043.56-dcevm`; it is a DCEVM build and matches JBR 17. Removing/replacing interfaces still fails on 11 and 17; JBR 21/25 support it.
@@ -284,10 +284,12 @@ JBR 11 here is `JBR-11.0.15.10-2043.56-dcevm`; it is a DCEVM build and matches J
 | Add interface | ✅ | ✅ |
 | Remove interface | ❌ hierarchy change | ❌ hierarchy change |
 | Replace interface | ❌ hierarchy change | ❌ hierarchy change |
-| Replace superclass | ❌ hierarchy change | ❌ hierarchy change |
+| Replace superclass | ❌ hierarchy change* | ❌ hierarchy change* |
 | Change method signature | ✅ | ✅ |
 
 DCEVM 8u282 and 11.0.15+1 are macOS x86_64 builds; they were run on Apple Silicon through Rosetta. Their structural behavior matches JBR 17: add/remove methods and fields, annotations, add interfaces, and method-signature changes pass; removing/replacing interfaces and replacing a superclass fail.
+
+\* Replacing a superclass is a class-hierarchy change. Standard JDK, JBR, and DCEVM hot reload cannot apply it; JRebel does not reload it either. Restart the application.
 
 Test commands:
 
