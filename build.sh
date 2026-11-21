@@ -10,6 +10,7 @@ cd "$(dirname "$0")"
 ASM_JAR="agent/lib/asm-9.8.jar"
 HOTSWAP_AGENT_JAR="${HOTSWAP_AGENT_JAR:-agent/lib/hotswap-agent-2.0.5.jar}"
 AGENT_JAR="agent/hotreload-agent.jar"
+PLUGIN_CLI="${OPENIDEA_PLUGIN:-openidea-plugin}"
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
 
 if [ -n "${JAVA_HOME_FOR_BUILD:-}" ]; then
@@ -53,7 +54,7 @@ cp target/wasm32-wasip2/release/hotreload.wasm dist/plugin.wasm
 ls -l "$AGENT_JAR" dist/plugin.wasm
 
 echo "== 4/4 check =="
-openidea-plugin check
+"$PLUGIN_CLI" check
 
 cat <<EOF
 

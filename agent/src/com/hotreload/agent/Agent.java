@@ -57,12 +57,13 @@ final class Agent {
                 + System.getProperty("java.vm.version", "");
         Log.info("Hot Reload agent " + version() + " (pid " + pid() + ", " + vm.trim() + ")");
         if (isJetBrainsRuntime()) {
-            Log.info("JetBrains Runtime 检测到：方法体热更开箱可用；增删方法/字段还需在运行配置的 VM options 加 "
-                    + "-XX:+AllowEnhancedClassRedefinition（已经加了可忽略）。");
+            Log.info("JetBrains Runtime 检测到：方法体热更开箱可用；结构热更需要 "
+                    + "-XX:+AllowEnhancedClassRedefinition。OpenIDEA 0.1.50+ 的 IDE 运行配置会自动加；"
+                    + "其他启动方式请在 VM options 里手动加。");
         }
 
         // HotSwapAgent reflects into java.base; open the packages at runtime so
-        // the IDE's -javaagent injection (which cannot add VM options) is enough.
+        // the IDE's -javaagent injection (plus API 1.14 vmOptions) is enough.
         boolean modulesOpen = JdkModuleOpens.open(instrumentation);
 
         // Register our transformer before HA starts, so MyBatis Configuration
@@ -137,7 +138,7 @@ final class Agent {
         } catch (Throwable ignored) {
             // fall through
         }
-        return "1.2.1";
+        return "1.3.0";
     }
 
     private static boolean isJetBrainsRuntime() {

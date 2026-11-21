@@ -8,6 +8,8 @@ The class-redefinition and Spring engine is [HotSwapAgent 2.0.5](https://github.
 
 Plugin ID: `weigram.hotreload`
 
+Requires **OpenIDEA 0.1.50** or newer (Plugin API 1.14).
+
 ## Recommended JDK: JBR or DCEVM
 
 A standard JDK is enough for method bodies, Mapper XML, and adding/removing class annotations. Use **JetBrains Runtime (JBR)** or **DCEVM** when you need structural changes: add/remove methods or fields, add interfaces, or change method signatures.
@@ -34,7 +36,7 @@ The exact menu label varies slightly by OpenIDEA version:
 
 1. **Project SDK:** `File › Project Structure › Project › SDK` (or `OpenIDEA › Settings › Project Structure`) and select the JBR/DCEVM home.
 2. **Run configuration:** `Run › Edit Configurations`, select the same JDK in **JRE**, or set the `jre` / `command` field in the project's `.openidea/run.toml`.
-3. **VM options:** add `-XX:+AllowEnhancedClassRedefinition` to the run configuration. It is accepted by JBR and DCEVM; a standard JDK rejects it.
+3. **VM options:** for an Application, Spring Boot or JAR Application configuration running on JBR, OpenIDEA 0.1.50+ adds `-XX:+AllowEnhancedClassRedefinition` automatically from the plugin's `javaAgents.vmOptions` declaration. Add it manually for Maven/Gradle goals, JUnit, Tomcat, remote JVMs, DCEVM, or an older OpenIDEA. The flag is gated to JetBrains Runtime (`jdk = "jetbrains"`); a standard JDK rejects it.
 4. If the project uses Maven, also select the same JDK under `Settings › Build, Execution, Deployment › Build Tools › Maven › Runner`.
 
 ### Unsupported-change warning
@@ -49,6 +51,7 @@ When the JVM refuses a structural change, the agent prints an English red warnin
 ## 1. Features
 
 - **Method-body hot reload** on JDK 8–25, in both **Run** and **Debug** configurations.
+- **Automatic enhanced redefinition flag** on OpenIDEA 0.1.50+ when an Application / Spring Boot / JAR Application runs on JBR; no manual VM-options edit for those configurations.
 - **MyBatis / MyBatis-Plus mapper XML reload** through a custom namespace reloader. The HA MyBatis plugins are disabled so mapper XML is not parsed twice.
 - **Spring bean / controller / AOP reprocessing** through HotSwapAgent's Spring plugin.
 - **Add/remove methods and fields, add class annotations, add interfaces** on JetBrains Runtime or DCEVM with `-XX:+AllowEnhancedClassRedefinition`.
@@ -162,7 +165,7 @@ Settings › Plugins › Install Plugin from Package File…
 
 | Capability     | Risk             | Why it is needed                                                                                  |
 | -------------- | ---------------- | ------------------------------------------------------------------------------------------------- |
-| `java.agent`   | high             | Runs the hot-reload agent inside the application JVM. OpenIDEA records the jar hash when granted. |
+| `java.agent`   | high             | Runs the agent inside the application JVM; on OpenIDEA 0.1.50+ it also contributes the enhanced-redefinition flag for JBR. The jar hash is recorded when granted. |
 | `ide.commands` | high             | Calls the IDE build action and, after automatic builds, returns focus to the editor.              |
 | `process:mvn`  | optional, high   | Manual Maven fallback when `buildBackend = maven`. Automatic builds use the IDE build.            |
 | `clipboard`    | optional, medium | Used by **Copy Enhanced VM Options**.                                                             |
@@ -191,13 +194,13 @@ Structural changes require **JetBrains Runtime (JBR)** and this VM option:
 -XX:+AllowEnhancedClassRedefinition
 ```
 
-Put it in the run configuration's **VM options** or in:
+For Application, Spring Boot and JAR Application configurations, OpenIDEA 0.1.50+ adds the flag automatically when the launch JDK is JBR; the plugin declares it next to its Java agent. The IDE keeps the user's own VM options and de-duplicates the flag. For Maven/Gradle goals, JUnit, Tomcat, remote JVMs, DCEVM, or older OpenIDEA versions, put it in the run configuration's **VM options** yourself, or in:
 
 ```text
 Edit Configurations → Edit configuration templates → Application / Spring Boot → VM options
 ```
 
-The plugin **does not choose or download JBR** and cannot modify the native run configuration's JRE or VM options. Select JBR as the project/run JDK yourself; the plugin only injects the agent. A standard JDK rejects the option with `Unrecognized VM option`.
+The plugin **does not choose or download JBR** and does not change the run configuration's JRE. Select JBR as the project/run JDK yourself. A standard JDK rejects the option with `Unrecognized VM option`; the automatic declaration is skipped outside JetBrains Runtime, so the agent still loads there.
 
 ### Commands
 
@@ -355,6 +358,6 @@ The Run console command contained `-javaagent:.../hotreload-agent.jar`, confirmi
 openidea-plugin check
 ```
 
-Builds require Rust with the `wasm32-wasip2` target, `openidea-plugin`, JDK 9+ for the agent, and Python 3.
+Builds require Rust with the `wasm32-wasip2` target, `openidea-plugin` from OpenIDEA 0.1.50+ (Plugin API 1.14), JDK 9+ for the agent, and Python 3.
 
 License: GPL-2.0-only. Bundled [HotSwapAgent 2.0.5](https://github.com/HotswapProjects/HotswapAgent) is GPL-2.0; ASM 9.8 is BSD-3-Clause. See `LICENSE` and `agent/lib/README.md`.

@@ -5,11 +5,13 @@
 
 改完 Java 或 MyBatis Mapper XML 保存，**自动编译 + 原地热更新**，应用不用重启。
 插件把 agent 通过 OpenIDEA 的 `[[contributes.javaAgents]]` 注入 IDE 自带的
-Application / Spring Boot / JAR Application 运行配置，Run 和 Debug 都生效，不需要改
-VM options，也不需要在项目里加任何依赖。实现思路参考了
+Application / Spring Boot / JAR Application 运行配置，Run 和 Debug 都生效。使用 JBR 时
+OpenIDEA 0.1.50+ 会自动加结构热更需要的 VM option，不需要手动改；也不需要在项目里加任何依赖。实现思路参考了
 [HotSwapHelper](https://github.com/gejun123456/HotSwapHelper) 项目。
 
 插件 ID：`weigram.hotreload`（社区市场 publisher `weigram`）。
+
+需要 **OpenIDEA 0.1.50** 或更新版本（Plugin API 1.14）。
 
 agent 的内核是 **HotSwapAgent 2.0.5**：类重定义、Spring bean/controller/AOP 重处理都由它负责；
 Mapper XML 由本插件的自研 reloader 负责（HA 的 MyBatis/MyBatis-Plus 插件被禁用，避免重复解析和代理冲突）。
@@ -45,7 +47,7 @@ HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=
 
 1. **项目 SDK**：`File › Project Structure › Project › SDK`（或 `OpenIDEA › Settings › Project Structure`），选择 JBR/DCEVM 的 Home。
 2. **运行配置**：`Run › Edit Configurations`，在 **JRE** 里选择同一个 JDK；也可以直接改项目 `.openidea/run.toml` 里的 `jre` / `command`。
-3. **VM options**：在运行配置里加 `-XX:+AllowEnhancedClassRedefinition`。JBR 和 DCEVM 支持；标准 JDK 会直接报错。
+3. **VM options**：Application / Spring Boot / JAR Application 配置如果运行在 JBR 上，OpenIDEA 0.1.50+ 会根据插件的 `javaAgents.vmOptions` 自动加 `-XX:+AllowEnhancedClassRedefinition`。Maven/Gradle goal、JUnit、Tomcat、远程 JVM、DCEVM 或旧版 OpenIDEA 仍需手动加。该参数只对 JetBrains Runtime 生效（`jdk = "jetbrains"`）；标准 JDK 会直接报错。
 4. 如果项目用 Maven，在 `Settings › Build, Execution, Deployment › Build Tools › Maven › Runner` 里也选同一个 JDK。
 
 ### 不支持热更时的提示
@@ -62,6 +64,7 @@ JVM 拒绝结构变更时，agent 会在应用控制台打印英文红色提示�
 - **保存即热更**：保存 Java 文件或 MyBatis Mapper XML 后自动触发 IDE 构建，agent 在运行中的 JVM 里重定义类或刷新 Mapper 语句；Run 和 Debug 都生效，应用不重启。
 - **JDK 8–25**：方法体和 Mapper XML 在 JDK 8 / 11 / 17 / 21 / 25 上可用，不需要额外 VM 参数。
 - **Spring 支持**：HotSwapAgent 2.0.5 负责类重定义和 Spring bean / controller / AOP 的 reprocess。
+- **自动增强参数**：OpenIDEA 0.1.50+ 在 Application / Spring Boot / JAR Application 跑在 JBR 上时，自动带上 `-XX:+AllowEnhancedClassRedefinition`，不需要手改 VM options。
 - **MyBatis / MyBatis-Plus**：自研 XML reloader 按 namespace 清旧语句、重新解析，失败回滚；不修改 Mapper 代理链，只给 `Configuration.addMappedStatement` 注入注册调用，兼容现有 MyBatis-Plus、PageHelper、Flowable 代理。
 - **结构热更**：JBR / DCEVM + `-XX:+AllowEnhancedClassRedefinition` 下支持增删方法/字段、增加类注解、增加接口；JBR 21/25 还支持删除/替换接口。替换父类仍不支持，需要重启。
 - **无额外 agent**：不需要外部 `hotswap-agent-2.0.5.jar`，不需要 `-XX:HotswapAgent=external`，也不需要 `--add-opens`。
@@ -194,8 +197,8 @@ JVM，也不往项目里写文件。
 
 ## 构建
 
-需要：Rust + `wasm32-wasip2` target、`openidea-plugin` CLI、JDK 9+（编译 agent）、
-Python 3。
+需要：Rust + `wasm32-wasip2` target、OpenIDEA 0.1.50+ 的 `openidea-plugin` CLI
+（Plugin API 1.14）、JDK 9+（编译 agent）、Python 3。
 
 ```bash
 ./build.sh
@@ -211,7 +214,7 @@ Python 3。
 安装本地 `.oiplugin`。
 
 1. `Settings › Plugins › Hot Reload` 里批准：
-   - `java.agent`（高，必需，agent 会跑在你的 Java 应用里）
+   - `java.agent`（高，必需，agent 会跑在你的 Java 应用里；OpenIDEA 0.1.50+ 还会为 JBR 自动带上增强重定义参数）
    - `ide.commands`（高，自动触发 IDE 构建）
    - `clipboard`（可选，复制增强 VM 参数）
    - `process:mvn`（可选，`buildBackend = maven` 时手动编译用）
@@ -223,7 +226,7 @@ Python 3。
 应用控制台里应看到：
 
 ```text
-15:00:05.744 [hotreload] INFO  Hot Reload agent 1.2.0 (pid 65453, OpenJDK 64-Bit Server VM 17.0.14+1-b1367.22)
+15:00:05.744 [hotreload] INFO  Hot Reload agent 1.3.0 (pid 65453, OpenJDK 64-Bit Server VM 17.0.14+1-b1367.22)
 15:00:05.900 [hotreload] INFO  class/Spring engine: HotSwapAgent 2.0.5 (autoHotswap, Spring plugin on, MyBatis plugins off)
 15:00:05.950 [hotreload] INFO  watching 1 class directories: …/target/classes
 15:00:08.137 HOTSWAP AGENT: … RELOAD … Reloading classes [com.qctc.lab.service.DemoService] (autoHotswap)
@@ -269,7 +272,7 @@ Run / Debug 不自己起 `mvn`，而是调用 IDE 的 `run.runContext` / `run.de
 
 The marketplace lists every capability the package asks for. This plugin needs:
 
-- **`java.agent` (high risk, required).** The agent runs arbitrary code inside the Java application JVM. It is the only way to redefine loaded classes and refresh MyBatis mapper statements without restarting. The agent is bundled from this repository, its path is validated inside the plugin package, and OpenIDEA records the jar hash when the capability is granted. Denying or revoking the grant means the application starts without the agent.
+- **`java.agent` (high risk, required).** The agent runs arbitrary code inside the Java application JVM. It is the only way to redefine loaded classes and refresh MyBatis mapper statements without restarting. The agent is bundled from this repository, its path is validated inside the plugin package, and OpenIDEA records the jar hash when the capability is granted. On OpenIDEA 0.1.50+ the same declaration also contributes the enhanced-redefinition VM flag for JBR. Denying or revoking the grant means the application starts without the agent.
 - **`ide.commands` (high risk, required).** Used to invoke `build.buildModule` after a save and, for automatic builds, `toolwindow.focusEditor`. The plugin does not build shell command strings.
 - **`process:mvn` (optional).** Used only for the manual Maven fallback (`buildBackend = maven`). Automatic builds use the IDE build. The plugin does not start arbitrary programs.
 - **`clipboard` (optional).** Used only by **Hot Reload: Copy Enhanced VM Options**.
