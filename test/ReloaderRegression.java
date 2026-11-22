@@ -103,6 +103,31 @@ public final class ReloaderRegression {
         check("XML statement reloads next to injected statement", sql(cg), "SELECT 5");
         check("injected BaseMapper statement still present",
                 cg.hasStatement("review.Mapper.selectList") ? "yes" : "no", "yes");
+
+        // MyBatis-Spring passes mapperLocation.toString(); Spring's
+        // FileSystemResource and UrlResource wrap the path in brackets.
+        Path spring = dir.resolve("spring/ReviewMapper.xml");
+        String absolute = spring.toAbsolutePath().toString();
+        String twoStatements = "<select id=\"value\" resultType=\"java.lang.String\">SELECT 1</select>\n"
+                + "<select id=\"removed\" resultType=\"java.lang.String\">SELECT 99</select>";
+        String oneStatement = "<select id=\"value\" resultType=\"java.lang.String\">SELECT 2</select>";
+
+        write(spring, twoStatements);
+        Configuration cFile = load(spring, "file [" + absolute + "]");
+        write(spring, oneStatement);
+        MyBatisXmlReloader.reload(spring, Arrays.asList(cFile));
+        check("Spring file resource keeps changed statement", sql(cFile), "SELECT 2");
+        check("Spring file resource removes deleted statement",
+                cFile.hasStatement("review.Mapper.removed") ? "yes" : "no", "no");
+
+        write(spring, twoStatements);
+        Configuration cUrl = load(spring, "URL [file:" + absolute + "]");
+        write(spring, oneStatement);
+        MyBatisXmlReloader.reload(spring, Arrays.asList(cUrl));
+        check("Spring URL resource keeps changed statement", sql(cUrl), "SELECT 2");
+        check("Spring URL resource removes deleted statement",
+                cUrl.hasStatement("review.Mapper.removed") ? "yes" : "no", "no");
+
         System.out.println("RELOADER REGRESSION PASS");
     }
 }

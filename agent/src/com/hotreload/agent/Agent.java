@@ -138,7 +138,7 @@ final class Agent {
         } catch (Throwable ignored) {
             // fall through
         }
-        return "1.3.0";
+        return "1.3.1";
     }
 
     private static boolean isJetBrainsRuntime() {

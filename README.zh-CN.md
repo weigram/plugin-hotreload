@@ -226,7 +226,7 @@ JVM，也不往项目里写文件。
 应用控制台里应看到：
 
 ```text
-15:00:05.744 [hotreload] INFO  Hot Reload agent 1.3.0 (pid 65453, OpenJDK 64-Bit Server VM 17.0.14+1-b1367.22)
+15:00:05.744 [hotreload] INFO  Hot Reload agent 1.3.1 (pid 65453, OpenJDK 64-Bit Server VM 17.0.14+1-b1367.22)
 15:00:05.900 [hotreload] INFO  class/Spring engine: HotSwapAgent 2.0.5 (autoHotswap, Spring plugin on, MyBatis plugins off)
 15:00:05.950 [hotreload] INFO  watching 1 class directories: …/target/classes
 15:00:08.137 HOTSWAP AGENT: … RELOAD … Reloading classes [com.qctc.lab.service.DemoService] (autoHotswap)

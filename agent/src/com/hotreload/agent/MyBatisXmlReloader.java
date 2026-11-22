@@ -366,12 +366,33 @@ public final class MyBatisXmlReloader {
     }
 
     private static String normalizeResource(String resource) {
-        String value = resource.replace('\\', '/');
+        String value = unwrapDescription(resource).replace('\\', '/');
         if (value.startsWith("file:")) {
             value = value.substring("file:".length());
             if (value.startsWith("//")) {
                 value = value.substring(2);
             }
+        }
+        return value;
+    }
+
+    /**
+     * MyBatis-Spring passes {@code mapperLocation.toString()} as the resource.
+     * Spring resources stringify as {@code file [/path]}, {@code URL
+     * [file:/path]}, {@code class path resource [mapper/x.xml]}, and similar
+     * bracketed forms; compare the path inside the brackets, not the label.
+     */
+    private static String unwrapDescription(String resource) {
+        String value = resource == null ? "" : resource.trim();
+        int open = value.indexOf('[');
+        if (open <= 0 || !value.endsWith("]")) {
+            return value;
+        }
+        String label = value.substring(0, open).trim();
+        if ("file".equalsIgnoreCase(label)
+                || "url".equalsIgnoreCase(label)
+                || label.toLowerCase().endsWith(" resource")) {
+            return value.substring(open + 1, value.length() - 1).trim();
         }
         return value;
     }
