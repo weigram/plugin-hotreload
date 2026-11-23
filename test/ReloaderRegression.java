@@ -128,6 +128,15 @@ public final class ReloaderRegression {
         check("Spring URL resource removes deleted statement",
                 cUrl.hasStatement("review.Mapper.removed") ? "yes" : "no", "no");
 
+        Path spaced = dir.resolve("mapper space/ReviewMapper.xml");
+        write(spaced, twoStatements);
+        Configuration cEncoded = load(spaced, "URL [" + spaced.toUri() + "]");
+        write(spaced, oneStatement);
+        MyBatisXmlReloader.reload(spaced, Arrays.asList(cEncoded));
+        check("Spring encoded URL resource keeps changed statement", sql(cEncoded), "SELECT 2");
+        check("Spring encoded URL resource removes deleted statement",
+                cEncoded.hasStatement("review.Mapper.removed") ? "yes" : "no", "no");
+
         System.out.println("RELOADER REGRESSION PASS");
     }
 }

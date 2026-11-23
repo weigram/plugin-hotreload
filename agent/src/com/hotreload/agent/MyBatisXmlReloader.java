@@ -5,6 +5,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -367,13 +368,29 @@ public final class MyBatisXmlReloader {
 
     private static String normalizeResource(String resource) {
         String value = unwrapDescription(resource).replace('\\', '/');
-        if (value.startsWith("file:")) {
+        if (value.regionMatches(true, 0, "file:", 0, "file:".length())) {
             value = value.substring("file:".length());
             if (value.startsWith("//")) {
                 value = value.substring(2);
             }
+            // A file URL escapes spaces and non-ASCII characters. The watcher
+            // path is a decoded filesystem path, so compare them in that form.
+            value = decodePercent(value);
         }
         return value;
+    }
+
+    private static String decodePercent(String value) {
+        if (value.indexOf('%') < 0) {
+            return value;
+        }
+        try {
+            // URLDecoder treats '+' as a space; URI paths can legitimately
+            // contain a literal '+', so protect it first.
+            return URLDecoder.decode(value.replace("+", "%2B"), StandardCharsets.UTF_8.name());
+        } catch (Throwable ignored) {
+            return value;
+        }
     }
 
     /**
