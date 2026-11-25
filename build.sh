@@ -48,6 +48,10 @@ echo "== 2/4 Rust component =="
 export PATH="$HOME/.cargo/bin:$PATH"
 cargo build --release --target wasm32-wasip2
 
+# The IDE pins an approved java.agent to the jar's SHA-256, so a rebuild with
+# another javac invalidates the grant until the agent is approved again.
+( cd . && shasum -a 256 "$AGENT_JAR" 2>/dev/null || sha256sum "$AGENT_JAR" ) | sed 's/^/    agent sha256: /'
+
 echo "== 3/4 package =="
 mkdir -p dist
 cp target/wasm32-wasip2/release/hotreload.wasm dist/plugin.wasm

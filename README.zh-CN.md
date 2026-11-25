@@ -11,7 +11,7 @@ OpenIDEA 0.1.50+ 会自动加结构热更需要的 VM option，不需要手动�
 
 插件 ID：`weigram.hotreload`（社区市场 publisher `weigram`）。
 
-需要 **OpenIDEA 0.1.50** 或更新版本（Plugin API 1.14）。
+Hot Reload 入口需要 **OpenIDEA 0.1.55**（Plugin API 1.18）；其他功能 0.1.50 起可用。
 
 agent 的内核是 **HotSwapAgent 2.0.5**：类重定义、Spring bean/controller/AOP 重处理都由它负责；
 Mapper XML 由本插件的自研 reloader 负责（HA 的 MyBatis/MyBatis-Plus 插件被禁用，避免重复解析和代理冲突）。
@@ -47,7 +47,9 @@ HA 通过 `HotswapAgent.premain` 直接启动，**不使用** `-XX:HotswapAgent=
 
 1. **项目 SDK**：`File › Project Structure › Project › SDK`（或 `OpenIDEA › Settings › Project Structure`），选择 JBR/DCEVM 的 Home。
 2. **运行配置**：`Run › Edit Configurations`，在 **JRE** 里选择同一个 JDK；也可以直接改项目 `.openidea/run.toml` 里的 `jre` / `command`。
-3. **VM options**：Application / Spring Boot / JAR Application 配置如果运行在 JBR 上，OpenIDEA 0.1.50+ 会根据插件的 `javaAgents.vmOptions` 自动加 `-XX:+AllowEnhancedClassRedefinition`。Maven/Gradle goal、JUnit、Tomcat、远程 JVM、DCEVM 或旧版 OpenIDEA 仍需手动加。该参数只对 JetBrains Runtime 生效（`jdk = "jetbrains"`）；标准 JDK 会直接报错。
+3. **VM options**：Application / Spring Boot / JAR Application 配置由 OpenIDEA 0.1.50+ 根据插件的 `javaAgents.vmOptions` 自动加 `-XX:+AllowEnhancedClassRedefinition`。
+
+   从 OpenIDEA **0.1.53** 起，IDE 按启动时真正使用的 JDK 判断：裸 `command`（如 `java`）会先经 `PATH` / `JAVA_HOME` 解析出实际 java，再读 `bin/java` 旁的 `release`，所以自动生成的配置也能拿到参数（[#5860](https://github.com/l0ng-ai/openidea/pull/5860)）。0.1.50–0.1.51 不解析裸命令，会提示 `JVM options of plugin … were not added: they require a … JDK`；那种版本要把 `command` 写成 JBR 的绝对路径（`/…/jbr-17/Contents/Home/bin/java`），或先手动保留该 VM option。`Hot Reload: Diagnose` 会列出仍在用裸命令的配置。Maven/Gradle goal、JUnit、Tomcat、远程 JVM、DCEVM 或旧版 OpenIDEA 仍需手动加。该参数只对 JetBrains Runtime 生效（`jdk = "jetbrains"`）；标准 JDK 会直接报错。
 4. 如果项目用 Maven，在 `Settings › Build, Execution, Deployment › Build Tools › Maven › Runner` 里也选同一个 JDK。
 
 ### 不支持热更时的提示
@@ -64,6 +66,7 @@ JVM 拒绝结构变更时，agent 会在应用控制台打印英文红色提示�
 - **保存即热更**：保存 Java 文件或 MyBatis Mapper XML 后自动触发 IDE 构建，agent 在运行中的 JVM 里重定义类或刷新 Mapper 语句；Run 和 Debug 都生效，应用不重启。
 - **JDK 8–25**：方法体和 Mapper XML 在 JDK 8 / 11 / 17 / 21 / 25 上可用，不需要额外 VM 参数。
 - **Spring 支持**：HotSwapAgent 2.0.5 负责类重定义和 Spring bean / controller / AOP 的 reprocess。
+- **Hot Reload Run / Debug 入口**：编辑器、编辑器标签、项目树，以及 Services 里运行配置的右键菜单（0.1.54+）。
 - **自动增强参数**：OpenIDEA 0.1.50+ 在 Application / Spring Boot / JAR Application 跑在 JBR 上时，自动带上 `-XX:+AllowEnhancedClassRedefinition`，不需要手改 VM options。
 - **MyBatis / MyBatis-Plus**：自研 XML reloader 按 namespace 清旧语句、重新解析，失败回滚；不修改 Mapper 代理链，只给 `Configuration.addMappedStatement` 注入注册调用，兼容现有 MyBatis-Plus、PageHelper、Flowable 代理。
 - **结构热更**：JBR / DCEVM + `-XX:+AllowEnhancedClassRedefinition` 下支持增删方法/字段、增加类注解、增加接口；JBR 21/25 还支持删除/替换接口。替换父类仍不支持，需要重启。
@@ -237,13 +240,27 @@ JVM，也不往项目里写文件。
 
 | 命令                                     | 快捷键              | 作用                                                                          |
 | -------------------------------------- | ---------------- | --------------------------------------------------------------------------- |
-| `Hot Reload: Run Current File`         | —                | 右键 / 命令面板：用 IDE 自己的上下文运行配置启动当前类（临时 Application / Spring Boot 配置），agent 自动注入 |
+| `Hot Reload: Run Current File`         | —                | 按当前文件对应的运行配置启动 executor                                                     |
 | `Hot Reload: Debug Current File`       | —                | 同上，Debug 启动                                                                 |
+| `Hot Reload: Run`                      | —                | 对 Services 里选中的配置启动 executor                                                     |
+| `Hot Reload: Debug`                    | —                | 同上，Debug 启动                                                                 |
 | `Hot Reload: Compile & Reload`         | ⌘⌥R / Ctrl+Alt+R | 立即编译当前文件所在模块；不依赖自动编译                                                        |
 | `Hot Reload: Diagnose`                 | —                | 打开 Markdown 诊断页：授权、项目 JDK、输出目录、运行配置里的增强参数、agent 日志示例                        |
 | `Hot Reload: Copy Enhanced VM Options` | —                | 复制 `-XX:+AllowEnhancedClassRedefinition`，用于 JBR 结构热更                        |
 
-编辑器右键、编辑器标签页右键、项目树右键只保留 **Run / Debug** 两个入口（图标 #11e3e9）。
+### Hot Reload Run / Debug
+
+插件在 IDE 的 Run / Debug 旁边加自己的入口：
+
+- **Hot Reload: Run Current File** / **Debug Current File**：编辑器、编辑器标签、项目树右键，按当前文件对应的运行配置启动 executor
+- **Hot Reload: Run** / **Hot Reload: Debug**：**Services** 里运行配置的右键菜单（Spring Boot / Application / JAR Application），启动你选中的那一条
+
+agent 绑定在 executor 上（`executor = "Hot Reload"`），所以 **IDE 自带的 Run / Debug 不带 agent，也不带插件声明的 VM option**，只有这两个入口带。插件命令传的是文本，executor 动作把它当作配置 id（或原样把 Services 参数传下去）——这个能力需要 **OpenIDEA 0.1.55**；`services.context` 本身 0.1.54 就有。
+
+### 重新构建插件之后
+
+IDE 会把批准的 `java.agent` 绑定到 agent jar 的 SHA-256。换一个 `javac` 重新构建会改变这个哈希（实测：JBR 17 的 javac 和 JBR 25 的 javac 编同一份源码得到不同的 jar），之后 IDE 就不会再往任何启动里加 agent——包括它自带的 Run/Debug——控制台会提示 `The Java agent of plugin … was not applied`。在 **Settings › Plugins › Hot Reload** 里重新批准 `java.agent`，再重启应用即可。`build.sh` 在打包前会打印 jar 的 SHA-256，方便对比两次构建。
+
 Compile 走状态栏点击或 `⌘⌥R`；Diagnose / Copy VM 在 Settings 的 Hot Reload 页或命令面板。
 Run / Debug 不自己起 `mvn`，而是调用 IDE 的 `run.runContext` / `run.debugContext`：
 上下文配置仍然是 IDE 的 Application / Spring Boot / JAR Application，所以 `javaAgents`

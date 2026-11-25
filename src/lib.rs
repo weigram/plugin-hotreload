@@ -20,7 +20,11 @@ use openidea_plugin::{
 };
 
 const STATUS_ID: &str = "weigram.hotreload.status";
+/// The IDE registers an executor action per plugin: `pluginExecutor.<id>.run`.
+/// The manifest id prefixes the action; the short id is the fallback.
+const EXECUTOR_ACTIONS: [&str; 2] = ["pluginExecutor.weigram.hotreload", "pluginExecutor.hotreload"];
 const ENHANCED_FLAG: &str = "-XX:+AllowEnhancedClassRedefinition";
+/// View id of the Services list, and the prefix of its item keys.
 
 #[derive(Default)]
 struct HotReload {
@@ -52,6 +56,8 @@ impl Plugin for HotReload {
             "compile" => self.compile(ctx),
             "run-context" => self.run_context(ctx, false),
             "debug-context" => self.run_context(ctx, true),
+            "run-service" => self.run_executor(_arg, false),
+            "debug-service" => self.run_executor(_arg, true),
             "doctor" => self.doctor(ctx),
             "copy-vm" => self.copy_vm(),
             other => Err(Error::NotFound(format!("command {other}"))),
@@ -115,47 +121,62 @@ impl HotReload {
         self.trigger_build(&target, ctx, true)
     }
 
-    /// Right-click Run/Debug: uses the IDE's own context action, so the
-    /// launched configuration is an Application / Spring Boot / JAR
-    /// Application one and `[[contributes.javaAgents]]` still adds the agent.
-    /// A file clicked in the project view is opened first, because the IDE
-    /// resolves the context from the focused editor.
+    /// Right-click Run/Debug with Hot Reload in the editor or project tree:
+    /// opens the selected file and starts the executor for its saved
+    /// configuration.
     fn run_context(&mut self, ctx: &Invocation, debug: bool) -> Result<Option<String>, Error> {
+        let selected = ctx
+            .selected_paths()
+            .into_iter()
+            .find(|path| is_source_change(path, true))
+            .or_else(|| ctx.editor().map(|editor| editor.path()));
+        let Some(path) = selected else {
+            return Err(Error::Failed("没有选中文件".into()));
+        };
+        let active = ctx.editor().map(|editor| editor.path());
+        if active.as_deref() != Some(path.as_str()) {
+            host::open_location(&path, 0, 0)?;
+        }
+        match config_id_for_file(ctx, &path)? {
+            Some(id) => self.run_executor(Some(&id), debug),
+            None => {
+                self.warn(
+                    "Hot Reload · 没有保存的运行配置",
+                    "这个文件没有对应的运行配置。用 Services 里的 Hot Reload: Run，或 IDE 的 More Run/Debug → Run '…' with Hot Reload。",
+                );
+                Ok(None)
+            }
+        }
+    }
+
+    /// Starts `pluginExecutor.<plugin id>.run|debug` with `arg`: a
+    /// configuration id, or the Services argument as it came.
+    fn run_executor(&mut self, arg: Option<&str>, debug: bool) -> Result<Option<String>, Error> {
         if !self.has("ide.commands") {
             self.warn_missing_commands();
             return Err(Error::Denied("ide.commands".into()));
         }
-        let selected = ctx
-            .selected_paths()
-            .into_iter()
-            .find(|path| is_source_change(path, true));
-        if let Some(path) = selected {
-            let active = ctx.editor().map(|editor| editor.path());
-            if active.as_deref() != Some(path.as_str()) {
-                host::open_location(&path, 0, 0)?;
+        let suffix = if debug { "debug" } else { "run" };
+        let mut last: Option<Error> = None;
+        for base in EXECUTOR_ACTIONS {
+            match host::execute_command(&format!("{base}.{suffix}"), arg) {
+                Ok(_) => {
+                    self.set_status("Hot Reload · Run", "已通过 Hot Reload executor 启动");
+                    return Ok(None);
+                }
+                Err(Error::Denied(_)) => {
+                    self.warn_missing_commands();
+                    return Err(Error::Denied("ide.commands".into()));
+                }
+                Err(error) => last = Some(error),
             }
         }
-        let action = if debug { "run.debugContext" } else { "run.runContext" };
-        match host::execute_command(action, None) {
-            Ok(_) => {
-                self.set_status(
-                    if debug { "Hot Reload · Debug" } else { "Hot Reload · Run" },
-                    "由 IDE 自带运行配置启动，agent 会自动注入",
-                );
-                Ok(None)
-            }
-            Err(Error::Denied(_)) => {
-                self.warn_missing_commands();
-                Err(Error::Denied("ide.commands".into()))
-            }
-            Err(error) => {
-                self.warn(
-                    "Hot Reload · 无法启动",
-                    &format!("IDE 的上下文运行没有执行：{error}"),
-                );
-                Err(error)
-            }
-        }
+        let error = last.unwrap_or_else(|| Error::Failed("找不到 Hot Reload executor".into()));
+        self.warn(
+            "Hot Reload · 无法启动",
+            &format!("OpenIDEA 0.1.55 起支持从命令启动 executor；当前 IDE 或插件版本不匹配：{error}"),
+        );
+        Err(error)
     }
 
     /// Builds the module of `target`. The IDE action is the default: it is
@@ -328,14 +349,29 @@ impl HotReload {
         if let Some(text) = &run_config {
             let has_flag = text.contains("AllowEnhancedClassRedefinition");
             lines.push(format!(
-                "- 运行配置 {}：{}",
+                "- 运行配置里手写的 {}：{}",
                 ENHANCED_FLAG,
-                if has_flag {
-                    "已包含"
-                } else {
-                    "未包含（只影响增删方法/字段；方法体热更不需要）"
-                }
+                if has_flag { "有" } else { "没有" }
             ));
+            let commands = run_configs(text);
+            let bare = commands
+                .iter()
+                .filter(|config| !config.main_class.is_empty())
+                .filter(|config| is_bare_command(&config.command))
+                .count();
+            let java_configs = commands.iter().filter(|config| !config.main_class.is_empty()).count();
+            if java_configs == 0 {
+                lines.push("- 自动添加：没有可识别的 Java 配置".to_string());
+            } else if bare == 0 {
+                lines.push(
+                    "- 自动添加：配置的 command 是绝对路径，IDE 能直接看到 JBR，会按插件声明加上该参数"
+                        .to_string(),
+                );
+            } else {
+                lines.push(format!(
+                    "- 自动添加：{bare}/{java_configs} 个配置的 command 是裸命令（如 `java`）。IDE 0.1.53+ 会按 PATH / JAVA_HOME 解析出实际 java，JBR 上照常加该参数；0.1.51 及更早不解析（Run 控制台会提示 `JVM options of plugin … were not added`），那种情况把 command 改成 JBR 绝对路径（`…/jbr-17.0.14/Contents/Home/bin/java`），或先手动保留该 VM option。"
+                ));
+            }
         } else {
             lines.push(format!(
                 "- 运行配置：没有 .openidea/run.toml，或读不到；结构热更需要手动加 {ENHANCED_FLAG}"
@@ -345,10 +381,11 @@ impl HotReload {
         lines.push(String::new());
         lines.push("## agent".to_string());
         lines.push(
-            "IDE 会通过 `[[contributes.javaAgents]]` 把 agent 加到 Application / Spring Boot / JAR Application 运行配置，Run 和 Debug 都生效。".to_string(),
+            "agent 绑定在 executor 上：只有用 `Run / Debug '…' with Hot Reload` 启动（OpenIDEA 0.1.54+）才会注入 agent；IDE 自带的 Run / Debug 不带 agent，也不带插件声明的 VM option。"
+                .to_string(),
         );
         lines.push(
-            "如果 `Settings › Plugins › Hot Reload` 里没有批准 `java.agent`，应用不会带 agent；批准后重新启动一次即可。"
+            "如果 `Settings › Plugins › Hot Reload` 里没有批准 `java.agent`，executor 启动会提示授权，而不是悄悄不带 agent。"
                 .to_string(),
         );
         lines.push(String::new());
@@ -452,6 +489,136 @@ impl HotReload {
     fn has(&self, capability: &str) -> bool {
         self.capabilities.iter().any(|value| value == capability)
     }
+}
+
+impl RunConfig {
+    /// Source file of the main class, relative to the project root.
+    fn source_path(&self) -> Option<String> {
+        if self.main_class.is_empty() {
+            return None;
+        }
+        let relative = format!("src/main/java/{}.java", self.main_class.replace('.', "/"));
+        Some(match self.module.trim_matches('/') {
+            "" => relative,
+            module => format!("{module}/{relative}"),
+        })
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RunConfig {
+    id: String,
+    name: String,
+    module: String,
+    main_class: String,
+    command: String,
+}
+
+/// The saved configuration whose main class is `path`, if any.
+fn config_id_for_file(ctx: &Invocation, path: &str) -> Result<Option<String>, Error> {
+    let Some(project) = ctx.project() else {
+        return Ok(None);
+    };
+    let Ok(root) = project.root() else {
+        return Ok(None);
+    };
+    let Ok(text) = project.read_file(&format!("{root}/.openidea/run.toml")) else {
+        return Ok(None);
+    };
+    let path = path.replace('\\', "/");
+    Ok(run_configs(&text).into_iter().find_map(|config| {
+        let relative = config.source_path()?;
+        let candidate = format!("{root}/{relative}");
+        (path == candidate.replace('\\', "/") || path.ends_with(&format!("/{relative}")))
+            .then_some(config.id)
+    }))
+}
+
+
+/// Parses the `[[configurations]]` tables of `.openidea/run.toml`, keeping
+/// the ones that name a main class.
+fn run_configs(text: &str) -> Vec<RunConfig> {
+    let mut configs: Vec<RunConfig> = Vec::new();
+    let mut current: Option<RunConfig> = None;
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line == "[[configurations]]" {
+            if let Some(config) = current.take() {
+                push_config(&mut configs, config);
+            }
+            current = Some(RunConfig::default());
+            continue;
+        }
+        let Some(config) = current.as_mut() else {
+            continue;
+        };
+        if let Some(value) = field(line, "id").filter(|_| config.id.is_empty()) {
+            config.id = value;
+        } else if let Some(value) = field(line, "name").filter(|_| config.name.is_empty()) {
+            config.name = value;
+        } else if line.starts_with("module") {
+            if let Some(value) = field(line, "module").filter(|_| config.module.is_empty()) {
+                config.module = value;
+            }
+        } else if let Some(value) = field(line, "mainClass") {
+            config.main_class = value;
+        } else if line.starts_with("command") {
+            if let Some(value) = field(line, "command").filter(|_| config.command.is_empty()) {
+                config.command = value;
+            }
+        }
+    }
+    if let Some(config) = current.take() {
+        push_config(&mut configs, config);
+    }
+    configs
+}
+
+/// A command the IDE cannot read a JDK from: `java`, `sh`, no path separator.
+fn is_bare_command(command: &str) -> bool {
+    let command = command.trim();
+    !command.is_empty() && !command.contains('/') && !command.contains('\\')
+}
+
+fn push_config(configs: &mut Vec<RunConfig>, mut config: RunConfig) {
+    if config.id.is_empty() {
+        return;
+    }
+    if config.name.is_empty() {
+        config.name = config.id.rsplit(':').next().unwrap_or(&config.id).to_string();
+    }
+    configs.push(config);
+}
+
+/// The quoted value of `key = "…"` anywhere on a TOML line, including inside
+/// an inline table such as `params = { mainClass = "…" }`.
+fn field(line: &str, key: &str) -> Option<String> {
+    let bytes = line.as_bytes();
+    let mut from = 0;
+    while let Some(offset) = line[from..].find(key) {
+        let start = from + offset;
+        let boundary = start == 0
+            || matches!(bytes[start - 1], b' ' | b'\t' | b'{' | b',' | b'(');
+        let after = &line[start + key.len()..];
+        let spaced = after.starts_with([' ', '\t', '=']);
+        if boundary && spaced {
+            if let Some(value) = quoted_value(after) {
+                return Some(value);
+            }
+        }
+        from = start + key.len();
+    }
+    None
+}
+
+fn quoted_value(rest: &str) -> Option<String> {
+    let rest = rest.trim_start().strip_prefix('=')?.trim_start();
+    let quote = rest.chars().next()?;
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+    let body = &rest[1..];
+    Some(body[..body.find(quote)?].to_string())
 }
 
 fn preferred_target(ctx: &Invocation) -> Option<String> {
@@ -761,20 +928,93 @@ mod tests {
         );
     }
 
+    const RUN_TOML: &str = "\
+[[configurations]]
+id = \"application:app:com.acme.App\"
+name = \"App\"
+kind = \"spring-boot\"
+command = \"java\"
+module = \"app\"
+params = { classpath = \"${classpath}\", mainClass = \"com.acme.App\", module = \"app\", programArgs = \"\" }
+
+[[configurations]]
+id = \"application:shell:deploy\"
+name = \"Deploy\"
+kind = \"shell\"
+command = \"sh\"
+";
+
     #[test]
-    fn right_click_run_uses_the_ide_context_action() {
-        let host = MockHost::install().with_capabilities(&[
-            "project.read",
-            "events",
-            "ide.commands",
-        ]);
+    fn parses_run_configurations_without_native_toml() {
+        let configs = run_configs(RUN_TOML);
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].id, "application:app:com.acme.App");
+        assert_eq!(configs[0].name, "App");
+        assert_eq!(configs[0].module, "app");
+        assert_eq!(configs[0].command, "java");
+        // A shell configuration has no main class; only Java ones count.
+        assert_eq!(configs[1].id, "application:shell:deploy");
+        assert!(configs[1].main_class.is_empty());
+    }
+
+    const SERVICE_ARG: &str = r#"{"services":[{"provider":"runConfigurations","id":"application:app:com.acme.App","kind":"spring-boot","name":"App","running":false,"runConfigurationId":"application:app:com.acme.App"}]}"#;
+
+    fn launch_host() -> MockHost {
+        let host = MockHost::install().with_capabilities(&["project.read", "events", "ide.commands"]);
+        host.set_project_root(Some("/project"));
+        host.add_file("/project/.openidea/run.toml", RUN_TOML);
+        host.add_file("/project/app/src/main/java/com/acme/App.java", "package com.acme; class App {}");
+        host
+    }
+
+    #[test]
+    fn services_run_forwards_the_services_argument_to_the_executor() {
+        let host = launch_host();
         let calls = Rc::new(RefCell::new(Vec::<Option<String>>::new()));
         let recorded = calls.clone();
-        host.on_command("run.runContext", move |arg| {
+        host.on_command("pluginExecutor.weigram.hotreload.run", move |arg| {
             recorded.borrow_mut().push(arg.map(str::to_owned));
             Ok(None)
         });
-        host.open_editor("/project/src/main/java/demo/App.java", "java", "class App {}", &[]);
+
+        let mut plugin = HotReload::default();
+        plugin.activate(&context()).unwrap();
+        plugin
+            .run_command("run-service", &host.invocation(), Some(SERVICE_ARG))
+            .unwrap();
+
+        assert_eq!(calls.borrow().as_slice(), &[Some(SERVICE_ARG.to_string())]);
+    }
+
+    #[test]
+    fn services_debug_uses_the_debug_executor() {
+        let host = launch_host();
+        let calls = Rc::new(RefCell::new(Vec::<String>::new()));
+        let recorded = calls.clone();
+        host.on_command("pluginExecutor.weigram.hotreload.debug", move |_| {
+            recorded.borrow_mut().push("debug".to_string());
+            Ok(None)
+        });
+
+        let mut plugin = HotReload::default();
+        plugin.activate(&context()).unwrap();
+        plugin
+            .run_command("debug-service", &host.invocation(), Some(SERVICE_ARG))
+            .unwrap();
+
+        assert_eq!(calls.borrow().as_slice(), ["debug"]);
+    }
+
+    #[test]
+    fn editor_run_starts_the_executor_for_the_file_configuration() {
+        let host = launch_host();
+        let calls = Rc::new(RefCell::new(Vec::<Option<String>>::new()));
+        let recorded = calls.clone();
+        host.on_command("pluginExecutor.weigram.hotreload.run", move |arg| {
+            recorded.borrow_mut().push(arg.map(str::to_owned));
+            Ok(None)
+        });
+        host.open_editor("/project/app/src/main/java/com/acme/App.java", "java", "class App {}", &[]);
 
         let mut plugin = HotReload::default();
         plugin.activate(&context()).unwrap();
@@ -782,31 +1022,10 @@ mod tests {
             .run_command("run-context", &host.invocation(), None)
             .unwrap();
 
-        assert_eq!(calls.borrow().as_slice(), &[None]);
-    }
-
-    #[test]
-    fn right_click_debug_uses_the_ide_context_action() {
-        let host = MockHost::install().with_capabilities(&[
-            "project.read",
-            "events",
-            "ide.commands",
-        ]);
-        let calls = Rc::new(RefCell::new(Vec::<Option<String>>::new()));
-        let recorded = calls.clone();
-        host.on_command("run.debugContext", move |arg| {
-            recorded.borrow_mut().push(arg.map(str::to_owned));
-            Ok(None)
-        });
-        host.open_editor("/project/src/main/java/demo/App.java", "java", "class App {}", &[]);
-
-        let mut plugin = HotReload::default();
-        plugin.activate(&context()).unwrap();
-        plugin
-            .run_command("debug-context", &host.invocation(), None)
-            .unwrap();
-
-        assert_eq!(calls.borrow().as_slice(), &[None]);
+        assert_eq!(
+            calls.borrow().as_slice(),
+            &[Some("application:app:com.acme.App".to_string())]
+        );
     }
 
     #[test]

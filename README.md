@@ -8,7 +8,7 @@ The class-redefinition and Spring engine is [HotSwapAgent 2.0.5](https://github.
 
 Plugin ID: `weigram.hotreload`
 
-Requires **OpenIDEA 0.1.50** or newer (Plugin API 1.14).
+Requires **OpenIDEA 0.1.55** (Plugin API 1.18) for the Hot Reload entries; the rest works from 0.1.50.
 
 ## Recommended JDK: JBR or DCEVM
 
@@ -50,6 +50,7 @@ When the JVM refuses a structural change, the agent prints an English red warnin
 
 ## 1. Features
 
+- **Hot Reload Run / Debug entries**: editor, editor tab, project tree and the Services context menu of a run configuration (0.1.54+).
 - **Method-body hot reload** on JDK 8–25, in both **Run** and **Debug** configurations.
 - **Automatic enhanced redefinition flag** on OpenIDEA 0.1.50+ when an Application / Spring Boot / JAR Application runs on JBR; no manual VM-options edit for those configurations.
 - **MyBatis / MyBatis-Plus mapper XML reload** through a custom namespace reloader. The HA MyBatis plugins are disabled so mapper XML is not parsed twice.
@@ -194,7 +195,9 @@ Structural changes require **JetBrains Runtime (JBR)** and this VM option:
 -XX:+AllowEnhancedClassRedefinition
 ```
 
-For Application, Spring Boot and JAR Application configurations, OpenIDEA 0.1.50+ adds the flag automatically when the launch JDK is JBR; the plugin declares it next to its Java agent. The IDE keeps the user's own VM options and de-duplicates the flag. For Maven/Gradle goals, JUnit, Tomcat, remote JVMs, DCEVM, or older OpenIDEA versions, put it in the run configuration's **VM options** yourself, or in:
+For Application, Spring Boot and JAR Application configurations, OpenIDEA 0.1.50+ adds the flag automatically; the plugin declares it next to its Java agent. The IDE keeps the user's own VM options and de-duplicates the flag.
+
+The IDE decides whether the flag applies from the JDK the launch really starts: from OpenIDEA 0.1.53 it resolves a bare `command` such as `java` through `PATH` / `JAVA_HOME` and reads `release` next to `bin/java`, so a generated configuration whose command is `java` still gets the flag when that java is JBR ([#5860](https://github.com/l0ng-ai/openidea/pull/5860)). On 0.1.50–0.1.51 the same configuration was skipped with `JVM options of plugin … were not added: they require a … JDK`; there, set the configuration's `command` to the absolute `/…/jbr-17/Contents/Home/bin/java`, or keep the flag in its VM options. `Hot Reload: Diagnose` names the configurations that still run a bare command. For Maven/Gradle goals, JUnit, Tomcat, remote JVMs, DCEVM, or older OpenIDEA versions, put it in the run configuration's **VM options** yourself, or in:
 
 ```text
 Edit Configurations → Edit configuration templates → Application / Spring Boot → VM options
@@ -206,13 +209,28 @@ The plugin **does not choose or download JBR** and does not change the run confi
 
 | Command                                | Shortcut         | Purpose                                                              |
 | -------------------------------------- | ---------------- | -------------------------------------------------------------------- |
-| `Hot Reload: Run Current File`         | —                | Start the current file with the IDE context run configuration (Run). |
-| `Hot Reload: Debug Current File`       | —                | Same, with the debugger.                                             |
+| `Hot Reload: Run Current File`         | —                | Start the executor for the open file's run configuration.          |
+| `Hot Reload: Debug Current File`       | —                | Same, with the debugger.                                            |
+| `Hot Reload: Run`                      | —                | Start the executor for the configuration picked in Services.       |
+| `Hot Reload: Debug`                    | —                | Same, with the debugger.                                            |
 | `Hot Reload: Compile & Reload`         | ⌘⌥R / Ctrl+Alt+R | Compile the current module immediately.                              |
 | `Hot Reload: Diagnose`                 | —                | Show grants, JDK, output directories, VM options, and log guidance.  |
 | `Hot Reload: Copy Enhanced VM Options` | —                | Copy `-XX:+AllowEnhancedClassRedefinition`.                          |
 
 The editor, editor-tab, and project-tree context menus contain only **Run** and **Debug**.
+
+### Run / Debug with Hot Reload
+
+The plugin adds its own entries next to the IDE's Run and Debug:
+
+- **Hot Reload: Run Current File** / **Debug Current File** in the editor, editor tab and project tree — starts the executor for that file's saved configuration.
+- **Hot Reload: Run** / **Hot Reload: Debug** in the **Services** context menu of a run configuration (Spring Boot, Application, JAR Application) — starts the executor for the configuration you picked.
+
+The agent is bound to the executor (`executor = "Hot Reload"`), so **the IDE's own Run and Debug carry no agent and no VM options from this plugin**: only these entries do. A plugin command passes text, which the executor action accepts as a configuration id (or as the Services argument it was given) — OpenIDEA **0.1.55** added that; `services.context` itself needs 0.1.54.
+
+### After rebuilding the plugin
+
+The IDE pins an approved `java.agent` to the agent jar's SHA-256. Rebuilding with another `javac` changes that hash (measured: JBR 17's javac and JBR 25's javac produce different jars from the same sources), so the IDE then leaves the agent out of every launch — its own Run/Debug included — with `The Java agent of plugin … was not applied` in the console. Approve `java.agent` again in **Settings › Plugins › Hot Reload**, then restart the application. `build.sh` prints the jar's SHA-256 before packaging so two builds can be compared.
 
 ### Notes
 
